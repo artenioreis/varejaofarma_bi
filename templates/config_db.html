@@ -1,0 +1,221 @@
+<!-- templates/config_db.html -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuração do Banco de Dados - VarejãoFarma BI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .config-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+        }
+        .logo-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo-container img {
+            max-width: 200px;
+            margin-bottom: 20px;
+        }
+        .required::after {
+            content: " *";
+            color: red;
+        }
+        .test-btn {
+            margin-top: 10px;
+        }
+        #testResult {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="config-card">
+        <div class="logo-container">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="VarejãoFarma Logo">
+            <h3 class="mb-4">Configuração do Banco de Dados</h3>
+            <p class="text-muted">Primeiro acesso - Configure a conexão com o SQL Server</p>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('config_db') }}" id="dbConfigForm">
+            <div class="mb-3">
+                <label for="server" class="form-label required">Servidor SQL Server</label>
+                <input type="text" class="form-control" id="server" name="server" 
+                       placeholder="Ex: localhost ou 192.168.1.100" required>
+                <div class="form-text">Endereço do servidor SQL Server</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="database" class="form-label required">Nome do Banco de Dados</label>
+                <input type="text" class="form-control" id="database" name="database" 
+                       placeholder="Ex: VarejaoFarmaDB" required>
+                <div class="form-text">Nome do banco de dados do sistema</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="username" class="form-label required">Usuário</label>
+                <input type="text" class="form-control" id="username" name="username" 
+                       placeholder="Ex: sa" required>
+                <div class="form-text">Usuário com acesso ao banco</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label required">Senha</label>
+                <input type="password" class="form-control" id="password" name="password" 
+                       placeholder="Senha do usuário" required>
+                <div class="form-text">Senha do usuário do banco</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="driver" class="form-label">Driver ODBC</label>
+                <select class="form-select" id="driver" name="driver">
+                    <option value="ODBC Driver 17 for SQL Server" selected>ODBC Driver 17 for SQL Server</option>
+                    <option value="ODBC Driver 13 for SQL Server">ODBC Driver 13 for SQL Server</option>
+                    <option value="SQL Server Native Client 11.0">SQL Server Native Client 11.0</option>
+                    <option value="SQL Server">SQL Server</option>
+                </select>
+                <div class="form-text">Driver ODBC instalado no servidor</div>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="button" id="testBtn" class="btn btn-outline-primary test-btn">
+                    <i class="bi bi-plug"></i> Testar Conexão
+                </button>
+
+                <div id="testResult"></div>
+
+                <button type="submit" id="saveBtn" class="btn btn-primary" disabled>
+                    <i class="bi bi-database-check"></i> Salvar Configuração
+                </button>
+            </div>
+        </form>
+
+        <div class="mt-4">
+            <div class="alert alert-info">
+                <h6><i class="bi bi-info-circle"></i> Informações importantes:</h6>
+                <ul class="mb-0">
+                    <li>Certifique-se que o SQL Server está acessível</li>
+                    <li>Verifique se o usuário tem permissões de leitura</li>
+                    <li>O driver ODBC deve estar instalado no servidor</li>
+                    <li>Após configurar, você será redirecionado para o login</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('testBtn').addEventListener('click', function() {
+            const server = document.getElementById('server').value;
+            const database = document.getElementById('database').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const driver = document.getElementById('driver').value;
+
+            if (!server || !database || !username || !password) {
+                alert('Por favor, preencha todos os campos obrigatórios');
+                return;
+            }
+
+            // Mostrar loading
+            const button = this;
+            const originalText = button.innerHTML;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Testando...';
+            button.disabled = true;
+
+            // Enviar requisição de teste
+            fetch('/test-connection', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    server: server,
+                    database: database,
+                    username: username,
+                    password: password,
+                    driver: driver
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('testResult');
+                if (data.status === 'success') {
+                    resultDiv.className = 'success';
+                    resultDiv.innerHTML = '<i class="bi bi-check-circle"></i> ' + data.message;
+                    document.getElementById('saveBtn').disabled = false;
+                } else {
+                    resultDiv.className = 'error';
+                    resultDiv.innerHTML = '<i class="bi bi-x-circle"></i> ' + data.message;
+                    document.getElementById('saveBtn').disabled = true;
+                }
+                resultDiv.style.display = 'block';
+            })
+            .catch(error => {
+                const resultDiv = document.getElementById('testResult');
+                resultDiv.className = 'error';
+                resultDiv.innerHTML = '<i class="bi bi-x-circle"></i> Erro ao testar conexão: ' + error.message;
+                resultDiv.style.display = 'block';
+                document.getElementById('saveBtn').disabled = true;
+            })
+            .finally(() => {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            });
+        });
+
+        // Habilitar botão salvar se todos os campos estiverem preenchidos
+        document.querySelectorAll('input, select').forEach(element => {
+            element.addEventListener('input', checkForm);
+            element.addEventListener('change', checkForm);
+        });
+
+        function checkForm() {
+            const server = document.getElementById('server').value;
+            const database = document.getElementById('database').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            document.getElementById('saveBtn').disabled = !(server && database && username && password);
+        }
+    </script>
+</body>
+</html>

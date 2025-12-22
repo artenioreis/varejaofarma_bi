@@ -1,0 +1,325 @@
+<!-- templates/dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
+            <p class="text-muted">Visão geral das vendas e desempenho</p>
+        </div>
+    </div>
+
+    <!-- Cards de Resumo -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total de Vendas (Mês)
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                R$ {{ "%.2f"|format(cards_data.total_vendas) }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-currency-dollar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total de Pedidos
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ cards_data.total_pedidos }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-cart-check fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Vendedores Ativos
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ cards_data.vendedores_ativos }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-people fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Clientes Ativos
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ cards_data.clientes_ativos }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-person-badge fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="row mb-4">
+        <!-- Gráfico de Top Vendedores -->
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Top 5 Vendedores do Mês</h6>
+                </div>
+                <div class="card-body">
+                    {% if graficos_data.top_vendedores %}
+                        <div id="chart-top-vendedores" style="height: 300px;"></div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Nenhum dado disponível para exibir.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico de Vendas por Tipo -->
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Vendas por Tipo de Pedido</h6>
+                </div>
+                <div class="card-body">
+                    {% if graficos_data.vendas_tipo %}
+                        <div id="chart-vendas-tipo" style="height: 300px;"></div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Nenhum dado disponível para exibir.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico de Evolução Diária -->
+    <div class="row mb-4">
+        <div class="col-xl-12 col-lg-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Evolução Diária de Vendas</h6>
+                </div>
+                <div class="card-body">
+                    {% if graficos_data.vendas_diarias %}
+                        <div id="chart-vendas-diarias" style="height: 300px;"></div>
+                    {% else %}
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> Nenhum dado disponível para exibir.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Top Vendedores -->
+    <div class="row">
+        <div class="col-xl-12 col-lg-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Ranking de Vendedores</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Posição</th>
+                                    <th>Vendedor</th>
+                                    <th>Total de Vendas</th>
+                                    <th>Quantidade de Pedidos</th>
+                                    <th>Ticket Médio</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for vendedor in top_vendedores %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ vendedor.nome_guerra }}</td>
+                                    <td>R$ {{ "%.2f"|format(vendedor.total_vendas) }}</td>
+                                    <td>{{ vendedor.qtd_pedidos }}</td>
+                                    <td>R$ {{ "%.2f"|format(vendedor.total_vendas / vendedor.qtd_pedidos if vendedor.qtd_pedidos > 0 else 0) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center">Nenhum dado disponível</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards de Acesso Rápido -->
+    <div class="row">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                <a href="{{ url_for('vendas_fabricante') }}" class="text-decoration-none text-primary">
+                                    Vendas por Fabricante
+                                </a>
+                            </div>
+                            <div class="h6 mb-0 text-gray-800">
+                                Análise detalhada por fabricante
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-building fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                <a href="{{ url_for('pedidos_eletronicos') }}" class="text-decoration-none text-success">
+                                    Pedidos Eletrônicos/Móveis
+                                </a>
+                            </div>
+                            <div class="h6 mb-0 text-gray-800">
+                                Análise por tipo de pedido
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-phone fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                <a href="{{ url_for('vendas_produto') }}" class="text-decoration-none text-info">
+                                    Vendas por Produto
+                                </a>
+                            </div>
+                            <div class="h6 mb-0 text-gray-800">
+                                Análise por produto
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-capsule fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                <a href="{{ url_for('config_db') }}" class="text-decoration-none text-warning">
+                                    Configurações
+                                </a>
+                            </div>
+                            <div class="h6 mb-0 text-gray-800">
+                                Configurar conexão com banco
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-gear fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Renderizar gráficos Plotly
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if graficos_data.top_vendedores %}
+            var topVendedoresChart = {{ graficos_data.top_vendedores|safe }};
+            Plotly.newPlot('chart-top-vendedores', topVendedoresChart.data, topVendedoresChart.layout);
+        {% endif %}
+
+        {% if graficos_data.vendas_tipo %}
+            var vendasTipoChart = {{ graficos_data.vendas_tipo|safe }};
+            Plotly.newPlot('chart-vendas-tipo', vendasTipoChart.data, vendasTipoChart.layout);
+        {% endif %}
+
+        {% if graficos_data.vendas_diarias %}
+            var vendasDiariasChart = {{ graficos_data.vendas_diarias|safe }};
+            Plotly.newPlot('chart-vendas-diarias', vendasDiariasChart.data, vendasDiariasChart.layout);
+        {% endif %}
+
+        // Atualizar dados a cada 5 minutos
+        setInterval(function() {
+            fetch('/api/dashboard-data')
+                .then(response => response.json())
+                .then(data => {
+                    // Atualizar cards
+                    document.querySelector('.card:nth-child(1) .h5').textContent = 'R$ ' + data.total_vendas.toFixed(2);
+                    document.querySelector('.card:nth-child(2) .h5').textContent = data.total_pedidos;
+                    document.querySelector('.card:nth-child(3) .h5').textContent = data.vendedores_ativos;
+                    document.querySelector('.card:nth-child(4) .h5').textContent = data.clientes_ativos;
+                })
+                .catch(error => console.error('Erro ao atualizar dados:', error));
+        }, 300000); // 5 minutos
+    });
+</script>
+{% endblock %}
