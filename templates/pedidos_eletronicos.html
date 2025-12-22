@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Resumo de Pedidos T/M{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-0 text-gray-800">Resumo de Vendas Eletrónicas e Móveis</h1>
+            <p class="text-muted">Consolidado mensal por vendedor: Opção 'T' (Eletrónico) e 'M' (Móvel)</p>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 bg-primary text-white">
+            <h6 class="m-0 font-weight-bold">Desempenho por Canal de Venda</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                    <thead class="thead-light text-center">
+                        <tr>
+                            <th class="text-left">Vendedor</th>
+                            <th>Total Eletrónico (T)</th>
+                            <th>Total Móvel (M)</th>
+                            <th class="bg-light">Total Geral (T+M)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in resumo %}
+                        <tr>
+                            <td class="font-weight-bold">{{ r.vendedor }}</td>
+                            <td class="text-center text-info">R$ {{ "%.2f"|format(r.total_t) }}</td>
+                            <td class="text-center text-primary">R$ {{ "%.2f"|format(r.total_m) }}</td>
+                            <td class="text-center font-weight-bold bg-light">R$ {{ "%.2f"|format(r.total_geral) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center">Nenhuma venda 'T' ou 'M' registada para este período.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if resumo %}
+                    <tfoot class="thead-light font-weight-bold text-center">
+                        <tr>
+                            <td class="text-right">TOTAIS:</td>
+                            <td>R$ {{ "%.2f"|format(resumo|sum(attribute='total_t')) }}</td>
+                            <td>R$ {{ "%.2f"|format(resumo|sum(attribute='total_m')) }}</td>
+                            <td class="bg-light">R$ {{ "%.2f"|format(resumo|sum(attribute='total_geral')) }}</td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

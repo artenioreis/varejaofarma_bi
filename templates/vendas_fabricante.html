@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Vendas vs Metas Fabricante{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-0 text-gray-800">Vendas por Fabricante vs Metas</h1>
+            <p class="text-muted">Acompanhamento de metas mensais (Cotas VECOT)</p>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 bg-primary text-white d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold">Consolidado de Cotas por Fabricante</h6>
+            <span class="badge bg-light text-primary">Período: 12/2025</span>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Vendedor</th>
+                            <th>Fabricante</th>
+                            <th class="text-center">Meta (Cota)</th>
+                            <th class="text-center">Realizado</th>
+                            <th class="text-center">Saldo (Falta)</th>
+                            <th class="text-center">% Ating.</th>
+                            <th class="text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for v in vendas %}
+                        <tr>
+                            <td>{{ v.vendedor }}</td>
+                            <td>{{ v.fabricante }}</td>
+                            <td class="text-center">{{ v.meta }}</td>
+                            <td class="text-center font-weight-bold">{{ v.realizadas }}</td>
+                            <td class="text-center text-danger">{{ v.Faltam }}</td>
+                            <td class="text-center">
+                                {# Cálculo seguro para evitar divisão por zero #}
+                                {% if v.meta and v.meta > 0 %}
+                                    {{ "%.1f"|format((v.realizadas / v.meta) * 100) }}%
+                                {% else %}
+                                    0.0%
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if v.Status == 'META BATIDA' %}
+                                    <span class="badge bg-success">META BATIDA</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">PENDENTE</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center">Nenhum dado encontrado para o filtro selecionado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
