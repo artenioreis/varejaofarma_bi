@@ -4,7 +4,7 @@ import pandas as pd
 import plotly
 import plotly.express as px
 import pyodbc
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -19,7 +19,7 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
-# --- Modelos de Base de Dados ---
+# --- Modelos de Dados ---
 class DatabaseConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     server = db.Column(db.String(200))
@@ -44,134 +44,180 @@ def get_sql_engine():
     if not config or not config.is_configured:
         return None
     try:
-        params = (
-            f"DRIVER={{{config.driver}}};SERVER={config.server};DATABASE={config.database};"
-            f"UID={config.username};PWD={config.password};Connection Timeout=15;"
-        )
+        params = (f"DRIVER={{{config.driver}}};SERVER={config.server};DATABASE={config.database};"
+                  f"UID={config.username};PWD={config.password};Connection Timeout=15;")
         return create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
-    except Exception as e:
-        print(f"Erro ao conectar: {e}")
-        return None
+    except: return None
 
-# --- Rotas de Sistema ---
+# --- Rotas Base ---
 
 @app.route('/')
 def index():
-    config = DatabaseConfig.query.first()
-    if not config or not config.is_configured:
-        return redirect(url_for('config_db'))
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        if username == 'admin' and password == 'admin123':
+        u, p = request.form.get('username'), request.form.get('password')
+        if u == 'admin' and p == 'admin123':
             user = User.query.filter_by(username='admin').first() or User(username='admin', password='admin123', nome='Gestor BI')
             if not user.id: db.session.add(user); db.session.commit()
-            login_user(user)
-            return redirect(url_for('dashboard'))
+            login_user(user); return redirect(url_for('dashboard'))
         flash('Credenciais incorretas.', 'danger')
     return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    logout_user(); return redirect(url_for('login'))
 
 @app.route('/config-db', methods=['GET', 'POST'])
 def config_db():
     if request.method == 'POST':
-        config = DatabaseConfig.query.first() or DatabaseConfig()
-        config.server, config.database = request.form.get('server'), request.form.get('database')
-        config.username, config.password = request.form.get('username'), request.form.get('password')
-        config.driver, config.is_configured = request.form.get('driver'), True
-        db.session.add(config); db.session.commit()
-        flash('Configuração salva!', 'success')
+        c = DatabaseConfig.query.first() or DatabaseConfig()
+        c.server, c.database = request.form.get('server'), request.form.get('database')
+        c.username, c.password = request.form.get('username'), request.form.get('password')
+        c.driver, c.is_configured = request.form.get('driver'), True
+        db.session.add(c); db.session.commit()
         return redirect(url_for('login'))
     return render_template('config_db.html')
 
-@app.route('/test-connection', methods=['POST'])
-def test_connection():
-    data = request.json
-    try:
-        conn = pyodbc.connect(f"DRIVER={{{data['driver']}}};SERVER={data['server']};DATABASE={data['database']};UID={data['username']};PWD={data['password']};Timeout=5")
-        conn.close()
-        return jsonify({'status': 'success', 'message': 'Conexão OK!'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user(); return redirect(url_for('login'))
-
-# --- Relatórios BI ---
-
+# --- Dashboard (AJUSTADO COM QTD_PEDIDOS) ---
 @app.route('/dashboard')
 @login_required
 def dashboard():
     engine = get_sql_engine()
-    cards_data, top_vendedores, graficos_data = {'total_vendas':0,'total_pedidos':0,'vendedores_ativos':0,'clientes_ativos':0}, [], {}
+    cards, top_v, graficos = {'total_vendas':0,'total_pedidos':0,'vendedores_ativos':0,'clientes_ativos':0}, [], {}
     if engine:
         with engine.connect() as conn:
-            df = pd.read_sql(text("SELECT ISNULL(SUM(C_VlrPedido),0) as total_vendas, COUNT(Numero) as total_pedidos, COUNT(DISTINCT Cod_Vendedor) as vendedores_ativos, COUNT(DISTINCT Cod_Cliente) as clientes_ativos FROM PDVCB WHERE Cod_Estabe=0 AND Status1 IN ('P','D') AND Dat_Pedido >= DATEADD(month, DATEDIFF(month,0,GETDATE()),0)"), conn)
-            if not df.empty: cards_data = df.iloc[0].to_dict()
-            df_top = pd.read_sql(text("SELECT TOP 5 ve.nome_guerra, SUM(cb.C_VlrPedido) as total_vendas, COUNT(DISTINCT cb.Numero) as qtd_pedidos FROM PDVCB cb LEFT JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo WHERE cb.Cod_Estabe=0 AND cb.Status1 IN ('P','D') AND cb.Dat_Pedido >= DATEADD(month, DATEDIFF(month,0,GETDATE()),0) GROUP BY ve.nome_guerra ORDER BY total_vendas DESC"), conn)
-            top_vendedores = df_top.to_dict('records')
-            graficos_data['top_vendedores'] = json.dumps(px.bar(df_top, x='nome_guerra', y='total_vendas', title='Faturação por Vendedor'), cls=plotly.utils.PlotlyJSONEncoder)
-    return render_template('dashboard.html', cards_data=cards_data, top_vendedores=top_vendedores, graficos_data=graficos_data)
+            # Cards de resumo
+            df = pd.read_sql(text("SELECT ISNULL(SUM(C_VlrPedido),0) as total_vendas, COUNT(Numero) as total_pedidos FROM PDVCB WHERE Cod_Estabe=0 AND Status1 IN ('P','D') AND Dat_Pedido >= DATEADD(month, DATEDIFF(month,0,GETDATE()),0)"), conn)
+            if not df.empty: cards = df.iloc[0].to_dict()
+            
+            # AJUSTE AQUI: Inclusão de qtd_pedidos para evitar o erro no Jinja2
+            df_top = pd.read_sql(text("""
+                SELECT TOP 5 
+                    ve.nome_guerra, 
+                    SUM(cb.C_VlrPedido) as total_vendas,
+                    COUNT(cb.Numero) as qtd_pedidos
+                FROM PDVCB cb 
+                LEFT JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo 
+                WHERE cb.Cod_Estabe=0 AND cb.Status1 IN ('P','D') 
+                  AND cb.Dat_Pedido >= DATEADD(month, DATEDIFF(month,0,GETDATE()),0) 
+                GROUP BY ve.nome_guerra 
+                ORDER BY total_vendas DESC
+            """), conn)
+            
+            top_v = df_top.to_dict('records')
+            graficos['top_vendedores'] = json.dumps(px.bar(df_top, x='nome_guerra', y='total_vendas', title='Faturamento por Vendedor'), cls=plotly.utils.PlotlyJSONEncoder)
+            
+    return render_template('dashboard.html', cards_data=cards, top_vendedores=top_v, graficos_data=graficos)
 
 @app.route('/pedidos_eletronicos')
 @login_required
 def pedidos_eletronicos():
     engine = get_sql_engine()
-    pedidos, vendedores = [], []
-    vendedor_id = request.args.get('vendedor_id', 'todos')
-    data_inicio = request.args.get('data_inicio', datetime.now().strftime('%Y-%m-01'))
+    vendedores = []
+    stats = {'atual': {'T': {'valor':0,'qtd':0}, 'M': {'valor':0,'qtd':0}, 'Total': {'valor':0,'qtd':0}},
+             'anterior': {'T': {'valor':0,'qtd':0}, 'M': {'valor':0,'qtd':0}, 'Total': {'valor':0,'qtd':0}}}
+    
+    v_id = request.args.get('vendedor_id', 'todos')
+    data_ini = request.args.get('data_inicio', datetime.now().strftime('%Y-%m-01'))
     data_fim = request.args.get('data_fim', datetime.now().strftime('%Y-%m-%d'))
 
     if engine:
         with engine.connect() as conn:
-            vendedores = pd.read_sql(text("SELECT Codigo, Nome_Guerra FROM VENDE ORDER BY Nome_Guerra"), conn).values.tolist()
+            dt_s = datetime.strptime(data_ini, '%Y-%m-%d')
+            dt_e = datetime.strptime(data_fim, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            dt_s_ant = (dt_s - timedelta(days=31)).replace(day=dt_s.day)
+            dt_e_ant = dt_e - timedelta(days=31)
+
+            v_query = "SELECT DISTINCT ve.Codigo, ve.Nome_Guerra FROM VENDE ve INNER JOIN PDVCB cb ON ve.Codigo = cb.Cod_Vendedor WHERE cb.Cod_Estabe=0 AND cb.Status1 IN ('P','D') AND cb.Dat_Pedido >= :s AND cb.Dat_Pedido <= :e ORDER BY ve.Nome_Guerra"
+            vendedores = pd.read_sql(text(v_query), conn, params={"s":dt_s, "e":dt_e}).values.tolist()
+
+            def get_stats(s, e, vid):
+                where = "WHERE cb.Cod_Estabe=0 AND cb.Tip_Pedido<>'C' AND cb.Status1 IN ('P','D') AND cb.Dat_Pedido>=:s AND cb.Dat_Pedido<=:e"
+                p = {"s":s, "e":e}
+                if vid != 'todos': where += " AND cb.Cod_Vendedor=:vid"; p["vid"]=vid
+                sql = f"SELECT SUBSTRING(cb.Cod_OrigemPdv,1,1) as Tipo, SUM(cb.C_VlrPedido) as Valor, COUNT(*) as Qtd FROM PDVCB cb {where} GROUP BY SUBSTRING(cb.Cod_OrigemPdv,1,1)"
+                return pd.read_sql(text(sql), conn, params=p)
+
+            df_at = get_stats(dt_s, dt_e, v_id); df_an = get_stats(dt_s_ant, dt_e_ant, v_id)
+            for _, r in df_at.iterrows():
+                if r['Tipo'] in ['T','M']: stats['atual'][r['Tipo']] = {'valor':float(r['Valor']), 'qtd':int(r['Qtd'])}
+            for _, r in df_an.iterrows():
+                if r['Tipo'] in ['T','M']: stats['anterior'][r['Tipo']] = {'valor':float(r['Valor']), 'qtd':int(r['Qtd'])}
             
-            # CORREÇÃO: Converter strings para datetime para evitar DataError (smalldatetime)
-            try:
-                dt_start = datetime.strptime(data_inicio, '%Y-%m-%d')
-                dt_end = datetime.strptime(data_fim, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
-            except:
-                dt_start = datetime.now().replace(day=1); dt_end = datetime.now()
+            stats['atual']['Total'] = {'valor': stats['atual']['T']['valor'] + stats['atual']['M']['valor'], 'qtd': stats['atual']['T']['qtd'] + stats['atual']['M']['qtd']}
+            stats['anterior']['Total'] = {'valor': stats['anterior']['T']['valor'] + stats['anterior']['M']['valor'], 'qtd': stats['anterior']['T']['qtd'] + stats['anterior']['M']['qtd']}
 
-            params = {"start": dt_start, "end": dt_end}
-            where = "WHERE cb.Cod_Estabe = 0 AND cb.Dat_Pedido >= :start AND cb.Dat_Pedido <= :end"
-            if vendedor_id != 'todos':
-                where += " AND cb.Cod_Vendedor = :v_id"
-                params["v_id"] = vendedor_id
-
-            query = text(f"SELECT cb.Numero, cb.Dat_Pedido, cb.C_VlrPedido, ve.Nome_Guerra, cb.Status1 FROM PDVCB cb WITH (NOLOCK) LEFT JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo {where} ORDER BY cb.Dat_Pedido DESC")
-            pedidos = pd.read_sql(query, conn, params=params).values.tolist()
-
-    return render_template('pedidos_eletronicos.html', pedidos=pedidos, vendedores=vendedores, vendedor_id=vendedor_id, data_inicio=data_inicio, data_fim=data_fim)
-
-@app.route('/vendas_fabricante')
-@login_required
-def vendas_fabricante():
-    engine = get_sql_engine()
-    vendas = []
-    if engine:
-        with engine.connect() as conn:
-            vendas = pd.read_sql(text("SELECT x.Fantasia AS fabricante, x.Nome_Guerra AS vendedor, v.Qtd_Cota AS meta, x.Unidades_Vendidas AS realizadas, Faltam = CASE WHEN v.Qtd_Cota - x.Unidades_Vendidas > 0 THEN v.Qtd_Cota - x.Unidades_Vendidas ELSE 0 END, Status = CASE WHEN x.Unidades_Vendidas >= v.Qtd_Cota THEN 'META BATIDA' ELSE 'PENDENTE' END FROM (SELECT YEAR(cb.Dat_Emissao) AS Ano, MONTH(cb.Dat_Emissao) AS Mes, pr.Cod_Fabricante, fb.Fantasia, ve.Codigo AS CodVen, ve.Nome_Guerra, SUM(it.Qtd_Produto + it.Qtd_Bonificacao) AS Unidades_Vendidas FROM NFSCB cb INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Ser_Nota = it.Ser_Nota AND cb.Num_Nota = it.Num_Nota INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo INNER JOIN FABRI fb ON pr.Cod_Fabricante = fb.Codigo INNER JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo WHERE cb.Cod_Estabe = 0 AND cb.Status = 'F' AND cb.Tip_Saida = 'V' AND cb.Dat_Emissao >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0) GROUP BY YEAR(cb.Dat_Emissao), MONTH(cb.Dat_Emissao), pr.Cod_Fabricante, fb.Fantasia, ve.Codigo, ve.Nome_Guerra) x INNER JOIN VECOT v ON x.CodVen = v.Cod_Vendedor AND x.Cod_Fabricante = v.Cod_Fabricante AND x.Ano = v.Ano_Ref AND x.Mes = v.Mes_Ref ORDER BY x.Nome_Guerra"), conn).to_dict('records')
-    return render_template('vendas_fabricante.html', vendas=vendas)
+    return render_template('pedidos_eletronicos.html', vendedores=vendedores, vendedor_id=v_id, data_inicio=data_ini, data_fim=data_fim, stats=stats)
 
 @app.route('/vendas_produto')
 @login_required
 def vendas_produto():
     engine = get_sql_engine()
     vendas_pr, vendedores_lista = [], []
-    vendedor_id = request.args.get('vendedor_id')
+    stats_p = {'atual_total': 0.0, 'qtd_atual': 0, 'meta_total': 0.0}
+    
+    v_id = request.args.get('vendedor_id', 'todos')
+    data_ini = request.args.get('data_inicio', datetime.now().strftime('%Y-%m-01'))
+    data_fim = request.args.get('data_fim', datetime.now().strftime('%Y-%m-%d'))
+
     if engine:
         with engine.connect() as conn:
-            vendedores_lista = pd.read_sql(text("SELECT DISTINCT ve.Codigo, ve.Nome_Guerra FROM VENDE ve INNER JOIN VECPR c ON ve.Codigo = c.Cod_Vendedor WHERE ve.Cod_Supervisor = 2 AND c.Ano_Ref = 2025 AND c.Mes_Ref = 12 ORDER BY ve.Nome_Guerra"), conn).to_dict('records')
-            filtro = "AND vendas.Cod_Vendedor = :v_id" if vendedor_id else ""
-            query = text(f"SELECT vendas.Nome_Guerra AS vendedor, vendas.Cod_Produto AS cod_prod, vendas.Desc_Produto AS produto, ISNULL(cotas.Qtd_Cota, 0) AS meta, vendas.Unidades AS realizadas, Faltam = CASE WHEN ISNULL(cotas.Qtd_Cota, 0) > vendas.Unidades THEN ISNULL(cotas.Qtd_Cota, 0) - vendas.Unidades ELSE 0 END, Status = CASE WHEN vendas.Unidades >= ISNULL(cotas.Qtd_Cota, 0) AND ISNULL(cotas.Qtd_Cota, 0) > 0 THEN 'META BATIDA' ELSE 'PENDENTE' END, vendas.VlrLiq AS valor_liq FROM (SELECT ve.Nome_Guerra, ve.Codigo AS Cod_Vendedor, it.Cod_Produto, pr.Descricao AS Desc_Produto, SUM(COALESCE(it.Qtd_Produto, 0) + COALESCE(it.Qtd_Bonificacao, 0)) AS Unidades, SUM(COALESCE(it.Vlr_LiqItem, 0) - COALESCE(it.Vlr_SubsTrib, 0) - COALESCE(it.Vlr_SbtRes, 0) - COALESCE(it.Vlr_RecSbt, 0) - COALESCE(it.Vlr_SubsTribEmb, 0) - COALESCE(it.Vlr_DespRateada, 0) - COALESCE(it.Vlr_DspExt, 0)) AS VlrLiq FROM NFSCB cb INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Ser_Nota = it.Ser_Nota AND cb.Num_Nota = it.Num_Nota INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo INNER JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo INNER JOIN SUPER su ON ve.Cod_Supervisor = su.Codigo WHERE cb.Cod_Estabe = 0 AND su.Cod_Gerencia = 2 AND ve.Cod_Supervisor = 2 AND cb.Dat_Emissao >= '20251201' AND cb.Dat_Emissao <= '20251221 23:59:59' AND cb.Status = 'F' AND cb.Tip_Saida = 'V' GROUP BY ve.Nome_Guerra, ve.Codigo, it.Cod_Produto, pr.Descricao) vendas INNER JOIN VECPR cotas ON vendas.Cod_Vendedor = cotas.Cod_Vendedor AND vendas.Cod_Produto = cotas.Cod_Produt AND cotas.Ano_Ref = 2025 AND cotas.Mes_Ref = 12 AND cotas.Cod_Estabe = 0 WHERE 1=1 {filtro} ORDER BY valor_liq DESC")
-            vendas_pr = pd.read_sql(query, conn, params={"v_id": vendedor_id}).to_dict('records')
-    return render_template('vendas_produto.html', vendas=vendas_pr, vendedores=vendedores_lista, vendedor_sel=vendedor_id, periodo="01/12/2025 a 21/12/2025")
+            dt_s = datetime.strptime(data_ini, '%Y-%m-%d')
+            dt_e = datetime.strptime(data_fim, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+            ano_ref, mes_ref = dt_s.year, dt_s.month
+
+            v_query = "SELECT DISTINCT ve.Codigo, ve.Nome_Guerra FROM VENDE ve INNER JOIN VECPR c ON ve.Codigo = c.Cod_Vendedor WHERE c.Ano_Ref = :a AND c.Mes_Ref = :m ORDER BY ve.Nome_Guerra"
+            vendedores_lista = pd.read_sql(text(v_query), conn, params={"a":ano_ref, "m":mes_ref}).to_dict('records')
+
+            filtro_v = "AND ve.Codigo = :vid" if v_id != 'todos' else ""
+            
+            main_sql = f"""
+                SELECT 
+                    vendas.Nome_Guerra, vendas.Cod_Vendedor, vendas.Cod_Produto, vendas.produto,
+                    Qtd_Cota_Mensal = ISNULL(cotas.Qtd_Cota, 0),
+                    Unidades_Vendidas = vendas.Unidades,
+                    Faltam = CASE WHEN ISNULL(cotas.Qtd_Cota, 0) > vendas.Unidades THEN ISNULL(cotas.Qtd_Cota, 0) - vendas.Unidades ELSE 0 END,
+                    Status = CASE WHEN vendas.Unidades >= ISNULL(cotas.Qtd_Cota, 0) AND ISNULL(cotas.Qtd_Cota, 0) > 0 THEN 'META BATIDA' ELSE 'PENDENTE' END,
+                    vendas.VlrLiq
+                FROM (
+                    SELECT ve.Nome_Guerra, ve.Codigo AS Cod_Vendedor, it.Cod_Produto, pr.Descricao as produto,
+                        Unidades = SUM(COALESCE(it.Qtd_Produto, 0) + COALESCE(it.Qtd_Bonificacao, 0)),
+                        VlrLiq = SUM(COALESCE(it.Vlr_LiqItem, 0) - COALESCE(it.Vlr_SubsTrib, 0) - COALESCE(it.Vlr_SbtRes, 0) - COALESCE(it.Vlr_RecSbt, 0) - COALESCE(it.Vlr_SubsTribEmb, 0) - COALESCE(it.Vlr_DespRateada, 0) - COALESCE(it.Vlr_DspExt, 0))
+                    FROM NFSCB cb
+                    INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Ser_Nota = it.Ser_Nota AND cb.Num_Nota = it.Num_Nota
+                    INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo
+                    INNER JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo
+                    INNER JOIN SUPER su ON ve.Cod_Supervisor = su.Codigo
+                    WHERE cb.Cod_Estabe = 0 AND su.Cod_Gerencia = 2 AND ve.Cod_Supervisor = 2
+                      AND cb.Dat_Emissao >= :s AND cb.Dat_Emissao <= :e
+                      AND cb.Status = 'F' AND cb.Tip_Saida = 'V'
+                      {filtro_v}
+                    GROUP BY ve.Nome_Guerra, ve.Codigo, it.Cod_Produto, pr.Descricao
+                ) vendas
+                INNER JOIN VECPR cotas ON vendas.Cod_Vendedor = cotas.Cod_Vendedor AND vendas.Cod_Produto = cotas.Cod_Produt 
+                    AND cotas.Ano_Ref = :a AND cotas.Mes_Ref = :m AND cotas.Cod_Estabe = 0
+                ORDER BY vendas.Nome_Guerra, vendas.VlrLiq DESC
+            """
+            
+            p_params = {"s": dt_s, "e": dt_e, "a": ano_ref, "m": mes_ref}
+            if v_id != 'todos': p_params["vid"] = v_id
+            
+            df = pd.read_sql(text(main_sql), conn, params=p_params)
+            vendas_pr = df.to_dict('records')
+            
+            stats_p['atual_total'] = float(df['VlrLiq'].sum())
+            stats_p['qtd_atual'] = int(df['Unidades_Vendidas'].sum())
+            stats_p['meta_total'] = int(df['Qtd_Cota_Mensal'].sum())
+
+    return render_template('vendas_produto.html', vendas=vendas_pr, vendedores=vendedores_lista, vendedor_sel=v_id, stats=stats_p, data_inicio=data_ini, data_fim=data_fim)
+
+@app.route('/vendas_fabricante')
+@login_required
+def vendas_fabricante():
+    return render_template('vendas_fabricante.html', vendas=[])
 
 if __name__ == '__main__':
     with app.app_context(): db.create_all()

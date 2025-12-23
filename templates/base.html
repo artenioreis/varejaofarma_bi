@@ -1,91 +1,81 @@
-<!-- templates/base.html -->
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VarejãoFarma BI - {% block title %}{% endblock %}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <title>{% block title %}Varejão Farma BI{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" height="40" class="d-inline-block align-text-top me-2">
-                VarejãoFarma BI
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
-                            <i class="bi bi-speedometer2"></i> Dashboard
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'vendas_fabricante' %}active{% endif %}" href="{{ url_for('vendas_fabricante') }}">
-                            <i class="bi bi-building"></i> Vendas por Fabricante
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'pedidos_eletronicos' %}active{% endif %}" href="{{ url_for('pedidos_eletronicos') }}">
-                            <i class="bi bi-phone"></i> Pedidos Eletrônicos/Móveis
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'vendas_produto' %}active{% endif %}" href="{{ url_for('vendas_produto') }}">
-                            <i class="bi bi-capsule"></i> Vendas por Produto
-                        </a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle"></i> {{ current_user.nome or current_user.username }}
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('config_db') }}">
-                                <i class="bi bi-database"></i> Configurar Banco
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
-                                <i class="bi bi-box-arrow-right"></i> Sair
-                            </a></li>
-                        </ul>
-                    </li>
-                </ul>
+<body class="bg-light">
+
+    {% if current_user.is_authenticated %}
+    <div class="d-flex" id="wrapper">
+        <div class="bg-dark text-white shadow-lg" id="sidebar-wrapper" style="min-width: 250px; min-height: 100vh;">
+            <div class="sidebar-heading text-center py-4 border-bottom border-secondary">
+                <img src="{{ url_for('static', filename='images/Logo.png') }}" alt="Logo" class="img-fluid px-3 mb-2" style="max-height: 60px;">
+                <h5 class="m-0 fw-bold text-success">BI Dashboard</h5>
+            </div>
+            <div class="list-group list-group-flush p-2">
+                <a href="{{ url_for('dashboard') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1 {% if request.endpoint == 'dashboard' %}active-nav{% endif %}">
+                    <i class="bi bi-speedometer2 me-2"></i> Dashboard
+                </a>
+                <a href="{{ url_for('pedidos_eletronicos') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1 {% if request.endpoint == 'pedidos_eletronicos' %}active-nav{% endif %}">
+                    <i class="bi bi-phone me-2"></i> Pedidos Eletrônicos
+                </a>
+                <a href="{{ url_for('vendas_produto') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1 {% if request.endpoint == 'vendas_produto' %}active-nav{% endif %}">
+                    <i class="bi bi-award me-2"></i> Cotas de Vendedores
+                </a>
+                <a href="{{ url_for('vendas_fabricante') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1 {% if request.endpoint == 'vendas_fabricante' %}active-nav{% endif %}">
+                    <i class="bi bi-box me-2"></i> Vendas Fabricante
+                </a>
+                <div class="mt-4 px-3 small text-secondary text-uppercase fw-bold">Configuração</div>
+                <a href="{{ url_for('config_db') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1">
+                    <i class="bi bi-database-gear me-2"></i> Conectar Banco
+                </a>
+                <a href="{{ url_for('logout') }}" class="list-group-item list-group-item-action bg-dark text-danger border-0 rounded-2 mt-5">
+                    <i class="bi bi-box-arrow-left me-2"></i> Sair
+                </a>
             </div>
         </div>
-    </nav>
 
-    <div class="container-fluid mt-3">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        <div id="page-content-wrapper" class="w-100">
+            <nav class="navbar navbar-expand-lg navbar-white bg-white border-bottom py-3 px-4 shadow-sm">
+                <div class="container-fluid">
+                    <span class="navbar-brand fw-bold text-dark">
+                        <i class="bi bi-layers-half text-success me-2"></i> Varejão Farma BI
+                    </span>
+                    <div class="ms-auto d-flex align-items-center">
+                        <span class="text-muted me-3 small d-none d-md-block">Bem-vindo, <strong>{{ current_user.nome }}</strong></span>
+                        <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
+                            {{ current_user.nome[0] | upper }}
+                        </div>
                     </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+                </div>
+            </nav>
 
-        {% block content %}{% endblock %}
-    </div>
+            <div class="container-fluid p-4">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    {% for category, message in messages %}
+                      <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                      </div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
 
-    <footer class="footer mt-auto py-3 bg-light">
-        <div class="container text-center">
-            <span class="text-muted">© 2025 VarejãoFarma - Sistema de Business Intelligence</span>
+                {% block content %}{% endblock %}
+            </div>
         </div>
-    </footer>
+    </div>
+    {% else %}
+        {% block login_content %}{% endblock %}
+    {% endif %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    {% block scripts %}{% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

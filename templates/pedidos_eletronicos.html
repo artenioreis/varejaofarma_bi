@@ -1,23 +1,21 @@
 {% extends "base.html" %}
 
-{% block title %}Relatório de Pedidos{% endblock %}
+{% block title %}Indicadores Gerenciais{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <div class="card shadow mb-4">
         <div class="card-header bg-primary text-white py-3">
-            <h6 class="m-0 font-weight-bold"><i class="bi bi-funnel"></i> Filtro de Pedidos por Vendedor</h6>
+            <h6 class="m-0 font-weight-bold"><i class="bi bi-funnel"></i> Filtros de Desempenho</h6>
         </div>
         <div class="card-body">
             <form method="GET" action="{{ url_for('pedidos_eletronicos') }}" class="row g-3">
                 <div class="col-md-4">
-                    <label class="form-label font-weight-bold">Vendedor</label>
-                    <select name="vendedor_id" class="form-select">
-                        <option value="todos">-- Todos os Vendedores --</option>
+                    <label class="form-label font-weight-bold">Vendedor (Ativos no Período)</label>
+                    <select name="vendedor_id" class="form-select" onchange="this.form.submit()">
+                        <option value="todos">-- Todos com Venda --</option>
                         {% for v in vendedores %}
-                        <option value="{{ v[0] }}" {% if vendedor_id|string == v[0]|string %}selected{% endif %}>
-                            {{ v[1] }}
-                        </option>
+                        <option value="{{ v[0] }}" {% if vendedor_id|string == v[0]|string %}selected{% endif %}>{{ v[1] }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -30,52 +28,86 @@
                     <input type="date" name="data_fim" class="form-control" value="{{ data_fim }}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
-                    <button type="submit" class="btn btn-success w-100">
-                        <i class="bi bi-search"></i> Filtrar
-                    </button>
+                    <button type="submit" class="btn btn-success w-100">Atualizar</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <div class="card shadow mb-4">
-        <div class="card-header bg-dark text-white py-3">
-            <h6 class="m-0 font-weight-bold">Listagem de Pedidos</h6>
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h4 mb-0 text-gray-800">Painel Comparativo: Atual vs. Mês Anterior</h1>
+    </div>
+
+    <div class="row">
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-header bg-white border-0 pb-0"><h6 class="font-weight-bold text-info"><i class="bi bi-graph-up-arrow"></i> FATURAMENTO TOTAL</h6></div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col border-right">
+                            <div class="text-xs text-muted">ATUAL</div>
+                            <div class="h4 font-weight-bold">R$ {{ "%.2f"|format(stats.atual.Total.valor) }}</div>
+                            <div class="text-xs text-info">Pedidos: <strong>{{ stats.atual.Total.qtd }}</strong></div>
+                        </div>
+                        <div class="col ps-3">
+                            <div class="text-xs text-muted">MÊS ANTERIOR</div>
+                            <div class="h5 text-gray-600">R$ {{ "%.2f"|format(stats.anterior.Total.valor) }}</div>
+                            <div class="text-xs">Ticket Médio: R$ {{ "%.2f"|format(stats.atual.Total.valor / stats.atual.Total.qtd if stats.atual.Total.qtd > 0 else 0) }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-0">
+                    {% set diff = stats.atual.Total.valor - stats.anterior.Total.valor %}
+                    <span class="badge {{ 'bg-success' if diff >= 0 else 'bg-danger' }}">Diferença: R$ {{ "%.2f"|format(diff) }}</span>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-bordered table-hover" width="100%" cellspacing="0">
-                    <thead class="thead-light">
-                        <tr>
-                            <th>Nº Pedido</th>
-                            <th>Data</th>
-                            <th>Vendedor</th>
-                            <th class="text-right">Valor Total</th>
-                            <th class="text-center">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for pedido in pedidos %}
-                        <tr>
-                            <td>{{ pedido[0] }}</td>
-                            <td>{{ pedido[1].strftime('%d/%m/%Y %H:%M') if pedido[1] else '' }}</td>
-                            <td>{{ pedido[3] }}</td>
-                            <td class="text-right font-weight-bold">R$ {{ "%.2f"|format(pedido[2]) }}</td>
-                            <td class="text-center">
-                                <span class="badge bg-info text-dark">
-                                    {{ 'Pendente' if pedido[4] == 'P' else 'Digitado' if pedido[4] == 'D' else pedido[4] }}
-                                </span>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="5" class="text-center text-muted py-4">
-                                <i class="bi bi-exclamation-circle"></i> Nenhum pedido encontrado para este filtro.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-header bg-white border-0 pb-0"><h6 class="font-weight-bold text-primary"><i class="bi bi-laptop"></i> PEDIDO ELETRÔNICO ('T')</h6></div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col border-right">
+                            <div class="text-xs text-muted">ATUAL</div>
+                            <div class="h4 font-weight-bold">R$ {{ "%.2f"|format(stats.atual.T.valor) }}</div>
+                            <div class="text-xs text-info">Pedidos: <strong>{{ stats.atual.T.qtd }}</strong></div>
+                        </div>
+                        <div class="col ps-3">
+                            <div class="text-xs text-muted">MÊS ANTERIOR</div>
+                            <div class="h5 text-gray-600">R$ {{ "%.2f"|format(stats.anterior.T.valor) }}</div>
+                            <div class="text-xs">Ticket Médio: R$ {{ "%.2f"|format(stats.atual.T.valor / stats.atual.T.qtd if stats.atual.T.qtd > 0 else 0) }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-0">
+                    {% set diff_t = stats.atual.T.valor - stats.anterior.T.valor %}
+                    <span class="badge {{ 'bg-success' if diff_t >= 0 else 'bg-danger' }}">Diferença: R$ {{ "%.2f"|format(diff_t) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-header bg-white border-0 pb-0"><h6 class="font-weight-bold text-success"><i class="bi bi-phone"></i> PEDIDO MÓVEL ('M')</h6></div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col border-right">
+                            <div class="text-xs text-muted">ATUAL</div>
+                            <div class="h4 font-weight-bold">R$ {{ "%.2f"|format(stats.atual.M.valor) }}</div>
+                            <div class="text-xs text-info">Pedidos: <strong>{{ stats.atual.M.qtd }}</strong></div>
+                        </div>
+                        <div class="col ps-3">
+                            <div class="text-xs text-muted">MÊS ANTERIOR</div>
+                            <div class="h5 text-gray-600">R$ {{ "%.2f"|format(stats.anterior.M.valor) }}</div>
+                            <div class="text-xs">Ticket Médio: R$ {{ "%.2f"|format(stats.atual.M.valor / stats.atual.M.qtd if stats.atual.M.qtd > 0 else 0) }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-0">
+                    {% set diff_m = stats.atual.M.valor - stats.anterior.M.valor %}
+                    <span class="badge {{ 'bg-success' if diff_m >= 0 else 'bg-danger' }}">Diferença: R$ {{ "%.2f"|format(diff_m) }}</span>
+                </div>
             </div>
         </div>
     </div>
