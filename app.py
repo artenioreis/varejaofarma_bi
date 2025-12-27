@@ -99,7 +99,7 @@ def dashboard():
             graficos['top_vendedores'] = json.dumps(px.bar(df_top, x='nome_guerra', y='total_vendas', title='Ranking de Faturamento'), cls=plotly.utils.PlotlyJSONEncoder)
     return render_template('dashboard.html', cards_data=cards, top_vendedores=top_v, graficos_data=graficos)
 
-# --- Análise de Clientes com Ranking Automático ---
+# --- Análise de Clientes Modificada (Financeiro CTREC) ---
 
 @app.route('/analise_cliente')
 @login_required
@@ -107,13 +107,12 @@ def analise_cliente():
     engine = get_sql_engine()
     vendedores, ranking_mais, ranking_menos, dados_busca = [], [], [], []
     cliente_detalhe, stats_detalhe, graficos = None, {}, {}
+    fin_status = {'status': 'Sem Pendências', 'total_aberto': 0, 'total_vencido': 0, 'tem_documentos': False}
 
-    # Parâmetros da URL
     v_id = request.args.get('vendedor_id', '').strip()
     cliente_id = request.args.get('cliente_id', '').strip()
     cliente_busca = request.args.get('cliente_busca', '').strip()
     
-    # Cálculo automático de datas (Mês Atual)
     hoje = datetime.now()
     primeiro_dia = hoje.replace(day=1)
     if hoje.month == 12: ultimo_dia = hoje.replace(year=hoje.year + 1, month=1, day=1) - timedelta(days=1)
@@ -125,18 +124,39 @@ def analise_cliente():
     if engine:
         with engine.connect() as conn:
             vendedores = pd.read_sql(text("SELECT Codigo, Nome_Guerra FROM VENDE WHERE bloqueado = 0 ORDER BY Nome_Guerra"), conn).to_dict('records')
-            
-            # Conversão segura para o SQL Server
             dt_ini = datetime.strptime(data_ini_str, '%Y-%m-%d')
             dt_fim = datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59)
 
-            # BLOCO 1: VISÃO DETALHADA (Quando clica em Analisar)
             if cliente_id:
-                df_cli = pd.read_sql(text("SELECT Codigo, Razao_Social, Bloqueado, Motivo_Bloqueio, Limite_Credito FROM clien WHERE Codigo = :cid"), conn, params={"cid": cliente_id})
+                # Dados Básicos do Cliente
+                df_cli = pd.read_sql(text("SELECT Codigo, Razao_Social, Limite_Credito FROM clien WHERE Codigo = :cid"), conn, params={"cid": cliente_id})
                 if not df_cli.empty:
                     c = df_cli.iloc[0]
-                    cliente_detalhe = {'codigo': c['Codigo'], 'nome': c['Razao_Social'], 'bloqueado': 'Sim' if c['Bloqueado']!='0' else 'Não', 'motivo': c['Motivo_Bloqueio'], 'limite': c['Limite_Credito']}
+                    cliente_detalhe = {'codigo': c['Codigo'], 'nome': c['Razao_Social'], 'limite': c['Limite_Credito']}
                     
+                    # --- NOVO: Lógica Financeira CTREC ---
+                    sql_financeiro = text("""
+                        SELECT 
+                            Vlr_Saldo,
+                            DATEDIFF(Day, DATEADD(Day, ISNULL(Qtd_DiaExtVct,0), GETDATE()), ISNULL(Dat_Vencimento,0)) as Dias_Atraso
+                        FROM CTREC 
+                        WHERE Cod_Cliente = :cid 
+                        AND (Status = 'A' OR Status = 'P') 
+                        AND Vlr_Saldo > 0
+                    """)
+                    df_fin = pd.read_sql(sql_financeiro, conn, params={"cid": cliente_id})
+                    
+                    if not df_fin.empty:
+                        fin_status['tem_documentos'] = True
+                        fin_status['total_aberto'] = df_fin['Vlr_Saldo'].sum()
+                        vencidos = df_fin[df_fin['Dias_Atraso'] < 0]
+                        if not vencidos.empty:
+                            fin_status['status'] = 'Inadimplente'
+                            fin_status['total_vencido'] = vencidos['Vlr_Saldo'].sum()
+                        else:
+                            fin_status['status'] = 'Em dia'
+
+                    # Estatísticas de Produtos
                     sql_it = text("SELECT pr.Descricao AS Produto, SUM(it.Qtd_Produto) AS Qtd_Produto FROM NFSCB cb INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Num_Nota = it.Num_Nota AND cb.Ser_Nota = it.Ser_Nota INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo WHERE cb.Cod_Cliente = :cid AND cb.Status = 'F' AND cb.Dat_Emissao BETWEEN :ini AND :fim GROUP BY pr.Descricao")
                     df_res = pd.read_sql(sql_it, conn, params={"cid": cliente_id, "ini": dt_ini, "fim": dt_fim})
                     
@@ -145,7 +165,7 @@ def analise_cliente():
                         stats_detalhe['top_10_menos'] = df_res.sort_values(by='Qtd_Produto', ascending=True).head(10).to_dict('records')
                         graficos['products'] = json.dumps(px.pie(df_res.head(5), values='Qtd_Produto', names='Produto', hole=.3).update_layout(height=300, margin=dict(l=10,r=10,t=10,b=10)), cls=plotly.utils.PlotlyJSONEncoder)
 
-                    # Histórico e Projeção
+                    # Histórico
                     df_h = pd.read_sql(text("SELECT YEAR(Dat_Emissao) as Ano, MONTH(Dat_Emissao) as Mes, SUM(Vlr_TotalNota) as Total FROM NFSCB WHERE Cod_Cliente = :cid AND Status = 'F' AND Dat_Emissao >= DATEADD(month, -6, GETDATE()) GROUP BY YEAR(Dat_Emissao), MONTH(Dat_Emissao) ORDER BY Ano, Mes"), conn, params={"cid": cliente_id})
                     if not df_h.empty:
                         df_h['Periodo'] = df_h['Mes'].astype(str) + '/' + df_h['Ano'].astype(str); avg = df_h['Total'].mean()
@@ -153,7 +173,6 @@ def analise_cliente():
                         fig = go.Figure([go.Bar(x=df_h['Periodo'], y=df_h['Total'], name='Real'), go.Scatter(x=pd.concat([df_h['Periodo'], df_p['Periodo']]), y=pd.concat([df_h['Total'], df_p['Total']]), name='Projeção', line=dict(dash='dot', color='green'))])
                         graficos['projection'] = json.dumps(fig.update_layout(height=350, margin=dict(l=20,r=20,t=20,b=20)), cls=plotly.utils.PlotlyJSONEncoder)
 
-            # BLOCO 2: BUSCA MANUAL (Se digitou algo ou escolheu vendedor)
             elif cliente_busca or v_id:
                 f, p = [], {"ini": dt_ini, "fim": dt_fim}
                 if v_id: f.append("ve.Codigo = :vid"); p["vid"] = v_id
@@ -170,7 +189,6 @@ def analise_cliente():
                 """
                 dados_busca = pd.read_sql(text(sql_busca), conn, params=p).to_dict('records')
 
-            # BLOCO 3: RANKINGS DO MÊS (Padrão ao abrir a página)
             else:
                 sql_ranking = """
                     SELECT cl.Codigo, cl.Razao_Social AS [Razao Social], ve.Nome_guerra AS [Vendedor], SUM(ISNULL(cb.Vlr_TotalNota,0)) as Total
@@ -187,9 +205,9 @@ def analise_cliente():
                     ranking_mais = df_all.sort_values(by='Total', ascending=False).head(10).to_dict('records')
                     ranking_menos = df_all.sort_values(by='Total', ascending=True).head(10).to_dict('records')
 
-    return render_template('analise_cliente.html', vendedores=vendedores, ranking_mais=ranking_mais, ranking_menos=ranking_menos, dados=dados_busca, cliente_detalhe=cliente_detalhe, stats_detalhe=stats_detalhe, graficos=graficos, data_inicio=data_ini_str, data_fim=data_fim_str, vendedor_sel=v_id, cliente_busca=cliente_busca)
+    return render_template('analise_cliente.html', vendedores=vendedores, ranking_mais=ranking_mais, ranking_menos=ranking_menos, dados=dados_busca, cliente_detalhe=cliente_detalhe, stats_detalhe=stats_detalhe, graficos=graficos, data_inicio=data_ini_str, data_fim=data_fim_str, vendedor_sel=v_id, cliente_busca=cliente_busca, financeiro=fin_status)
 
-# Mantendo as demais rotas para evitar BuildError
+# Mantendo as demais rotas para compatibilidade
 @app.route('/pedidos_eletronicos')
 @login_required
 def pedidos_eletronicos(): return render_template('pedidos_eletronicos.html', vendedores=[], vendedor_id='todos', data_inicio='', data_fim='', stats={'atual': {'Total': {'valor':0,'qtd':0}}, 'anterior': {'Total': {'valor':0,'qtd':0}}})

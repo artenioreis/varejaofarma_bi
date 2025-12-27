@@ -137,9 +137,21 @@
                     <div class="card-body d-flex justify-content-between align-items-center">
                         <div>
                             <h4 class="mb-0 text-success">{{ cliente_detalhe.nome }} ({{ cliente_detalhe.codigo }})</h4>
-                            <span class="badge bg-{{ 'danger' if cliente_detalhe.bloqueado == 'Sim' else 'success' }} mt-2">
-                                {{ 'BLOQUEADO: ' ~ (cliente_detalhe.motivo or 'Motivo não informado') if cliente_detalhe.bloqueado == 'Sim' else 'SITUAÇÃO: ATIVO' }}
-                            </span>
+                            <div class="mt-2">
+                                {% if financeiro.status == 'Inadimplente' %}
+                                    <span class="badge bg-danger shadow-sm">
+                                        <i class="bi bi-exclamation-octagon"></i> INADIMPLENTE: R$ {{ "%.2f"|format(financeiro.total_vencido) }} EM ATRASO
+                                    </span>
+                                {% elif financeiro.status == 'Em dia' %}
+                                    <span class="badge bg-primary shadow-sm">
+                                        <i class="bi bi-check-circle"></i> EM DIA: R$ {{ "%.2f"|format(financeiro.total_aberto) }} EM ABERTO (A VENCER)
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-success shadow-sm">
+                                        <i class="bi bi-shield-check"></i> SEM PENDÊNCIAS FINANCEIRAS
+                                    </span>
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="text-end">
                             <small class="text-muted d-block">LIMITE DE CRÉDITO</small>
