@@ -12,7 +12,6 @@ from sqlalchemy import text, create_engine
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'varejao-farma-bi-2025-v-final'
-# O Flask-SQLAlchemy 3.0+ busca automaticamente na pasta 'instance'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///varejaofarma.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -101,6 +100,7 @@ def analise_cliente():
     engine = get_sql_engine()
     vendedores, ranking_mais, ranking_menos, dados_busca = [], [], [], []
     cliente_detalhe, stats_detalhe, graficos, faturas_3m = None, {}, {}, []
+    recomendacoes = {'comprados': [], 'sugeridos': [], 'total_notas': 0, 'valor_total': 0, 'dias_inatividade': 0}
     fin_status = {'status': 'Sem Pendências', 'total_aberto': 0, 'total_vencido': 0, 'saldo_disponivel': 0}
 
     v_id = request.args.get('vendedor_id', '').strip()
@@ -120,37 +120,99 @@ def analise_cliente():
                 if not df_cli.empty:
                     c = df_cli.iloc[0]
                     cliente_detalhe = {'codigo': c['Codigo'], 'nome': c['Razao_Social'], 'limite': c['Limite_Credito']}
-                    
-                    # Faturamento 3 meses (Estab. 0)
-                    sql_faturas = text("""
-                        SELECT TOP 3 MONTH(Dat_Emissao) as Mes, YEAR(Dat_Emissao) as Ano, SUM(Vlr_TotalNota) as Total 
-                        FROM NFSCB WHERE Cod_Cliente = :cid AND Status = 'F' AND Cod_Estabe = 0 
-                        AND Dat_Emissao >= DATEADD(MONTH, -3, GETDATE())
-                        GROUP BY YEAR(Dat_Emissao), MONTH(Dat_Emissao) ORDER BY Ano DESC, Mes DESC
-                    """)
+
+                    sql_faturas = text("SELECT TOP 3 MONTH(Dat_Emissao) as Mes, YEAR(Dat_Emissao) as Ano, SUM(Vlr_TotalNota) as Total FROM NFSCB WHERE Cod_Cliente = :cid AND Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao >= DATEADD(MONTH, -3, GETDATE()) GROUP BY YEAR(Dat_Emissao), MONTH(Dat_Emissao) ORDER BY Ano DESC, Mes DESC")
                     faturas_3m = pd.read_sql(sql_faturas, conn, params={"cid": cliente_id}).to_dict('records')
 
-                    # Financeiro e Saldo Disponível
                     df_fin = pd.read_sql(text("SELECT Vlr_Saldo, DATEDIFF(Day, GETDATE(), Dat_Vencimento) as Dias FROM CTREC WHERE Cod_Cliente = :cid AND Status IN ('A','P') AND Vlr_Saldo > 0"), conn, params={"cid": cliente_id})
                     fin_status['total_aberto'] = df_fin['Vlr_Saldo'].sum() if not df_fin.empty else 0
                     fin_status['saldo_disponivel'] = (cliente_detalhe['limite'] or 0) - fin_status['total_aberto']
-                    
+
                     if not df_fin.empty:
                         venc = df_fin[df_fin['Dias'] < 0]
                         if not venc.empty:
                             fin_status['status'], fin_status['total_vencido'] = 'Inadimplente', venc['Vlr_Saldo'].sum()
                         else: fin_status['status'] = 'Em dia'
 
-                    # Mix de Produtos
-                    sql_it = text("SELECT pr.Descricao AS Produto, SUM(it.Qtd_Produto) AS Qtd FROM NFSCB cb INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Num_Nota = it.Num_Nota AND cb.Ser_Nota = it.Ser_Nota INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo WHERE cb.Cod_Cliente = :cid AND cb.Status = 'F' AND cb.Cod_Estabe = 0 AND cb.Dat_Emissao BETWEEN :ini AND :fim GROUP BY pr.Descricao")
-                    df_res = pd.read_sql(sql_it, conn, params={"cid": cliente_id, "ini": dt_ini, "fim": dt_fim})
+                    sql_rec = text("""
+                        WITH ClienteProdutos AS (
+                            SELECT cb.Cod_Cliente, it.Cod_Produto, p.Descricao as Produto, p.Cod_Fabricante,
+                                   SUM(it.Qtd_Produto) AS QtdTotal, COUNT(DISTINCT cb.Num_Nota) AS QtdCompras
+                            FROM NFSIT it
+                            INNER JOIN NFSCB cb ON it.Num_Nota = cb.Num_Nota AND it.Ser_Nota = cb.Ser_Nota AND it.Cod_Estabe = cb.Cod_Estabe
+                            INNER JOIN PRODU p ON it.Cod_Produto = p.Codigo
+                            WHERE cb.Dat_Emissao BETWEEN :ini AND :fim AND cb.Status = 'F' AND cb.Cod_Estabe = 0
+                            GROUP BY cb.Cod_Cliente, it.Cod_Produto, p.Descricao, p.Cod_Fabricante
+                        ),
+                        ProdutosRelacionados AS (
+                            SELECT cp1.Cod_Cliente, cp2.Produto as Relacionado, cp1.Produto as Base, COUNT(DISTINCT cp2.Cod_Cliente) as Popularidade
+                            FROM ClienteProdutos cp1
+                            JOIN ClienteProdutos cp2 ON cp2.Cod_Cliente <> cp1.Cod_Cliente AND cp2.Cod_Fabricante = cp1.Cod_Fabricante
+                            WHERE cp1.Cod_Cliente = :cid
+                            GROUP BY cp1.Cod_Cliente, cp2.Produto, cp1.Produto
+                        )
+                        SELECT
+                            (SELECT TOP 5 cp.Produto + ' (' + CAST(CAST(cp.QtdTotal AS INT) AS VARCHAR) + ' un);'
+                             FROM ClienteProdutos cp WHERE cp.Cod_Cliente = :cid ORDER BY cp.QtdTotal DESC FOR XML PATH('')) as TopComprados,
+                            (SELECT TOP 5 pr.Relacionado + ' (Base: ' + pr.Base + ');'
+                             FROM ProdutosRelacionados pr WHERE pr.Cod_Cliente = :cid ORDER BY pr.Popularidade DESC FOR XML PATH('')) as TopSugeridos,
+                            COUNT(DISTINCT Num_Nota) as Notas, SUM(Vlr_TotalNota) as Total, DATEDIFF(DAY, MAX(Dat_Emissao), GETDATE()) as Dias
+                        FROM NFSCB WHERE Cod_Cliente = :cid AND Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao BETWEEN :ini AND :fim
+                    """)
+                    res_rec = conn.execute(sql_rec, {"cid": cliente_id, "ini": dt_ini, "fim": dt_fim}).fetchone()
+                    if res_rec:
+                        recomendacoes = {
+                            'comprados': [x.strip() for x in (res_rec[0].split(';') if res_rec[0] else []) if x.strip()],
+                            'sugeridos': [x.strip() for x in (res_rec[1].split(';') if res_rec[1] else []) if x.strip()],
+                            'total_notas': res_rec[2] or 0,
+                            'valor_total': res_rec[3] or 0,
+                            'dias_inatividade': res_rec[4] or 0
+                        }
+
+                    # Gráfico de Evolução com Valores nas Barras - CORRIGIDO
+                    sql_evolucao = text("""
+                        SELECT
+                            CAST(YEAR(Dat_Emissao) AS VARCHAR) + '/' + RIGHT('0' + CAST(MONTH(Dat_Emissao) AS VARCHAR), 2) as Periodo,
+                            SUM(Vlr_TotalNota) as Total
+                        FROM NFSCB
+                        WHERE Cod_Cliente = :cid AND Status = 'F' AND Cod_Estabe = 0
+                          AND Dat_Emissao BETWEEN :ini AND :fim
+                        GROUP BY YEAR(Dat_Emissao), MONTH(Dat_Emissao)
+                        ORDER BY Periodo
+                    """)
+                    df_evolucao = pd.read_sql(sql_evolucao, conn, params={"cid": cliente_id, "ini": dt_ini, "fim": dt_fim})
+                    if not df_evolucao.empty:
+                        # Formatar os valores para exibição
+                        df_evolucao['Total_Formatado'] = df_evolucao['Total'].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+
+                        fig = px.bar(df_evolucao, x='Periodo', y='Total', 
+                                     title='Evolução Mensal de Compras (R$)',
+                                     labels={'Total': 'Valor (R$)', 'Periodo': 'Mês/Ano'},
+                                     color_discrete_sequence=['#28a745'])
+
+                        # Configuração para mostrar os valores formatados dentro das barras
+                        fig.update_traces(
+                            texttemplate='%{text}', 
+                            textposition='inside',
+                            text=df_evolucao['Total_Formatado']
+                        )
+
+                        fig.update_layout(
+                            height=350, 
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            xaxis_title="Mês/Ano", 
+                            yaxis_title="Faturamento",
+                            uniformtext_minsize=10,
+                            uniformtext_mode='hide'
+                        )
+
+                        graficos['evolucao_compras'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+                    df_res = pd.read_sql(text("SELECT pr.Descricao AS Produto, SUM(it.Qtd_Produto) AS Qtd FROM NFSCB cb INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Num_Nota = it.Num_Nota AND cb.Ser_Nota = it.Ser_Nota INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo WHERE cb.Cod_Cliente = :cid AND cb.Status = 'F' AND cb.Cod_Estabe = 0 AND cb.Dat_Emissao BETWEEN :ini AND :fim GROUP BY pr.Descricao"), conn, params={"cid": cliente_id, "ini": dt_ini, "fim": dt_fim})
                     if not df_res.empty:
-                        stats_detalhe['top_10_mais'] = df_res.sort_values(by='Qtd', ascending=False).head(10).rename(columns={'Qtd':'Qtd_Produto'}).to_dict('records')
-                        stats_detalhe['top_10_menos'] = df_res.sort_values(by='Qtd', ascending=True).head(10).rename(columns={'Qtd':'Qtd_Produto'}).to_dict('records')
-                        graficos['products'] = json.dumps(px.pie(df_res.head(5), values='Qtd', names='Produto', hole=.3).update_layout(height=300), cls=plotly.utils.PlotlyJSONEncoder)
+                        stats_detalhe['top_10_mais'] = df_res.sort_values(by='Qtd', ascending=False).head(10).to_dict('records')
 
             elif cliente_busca or v_id:
-                # Busca de Clientes - SQL aprimorado para evitar filtros excessivos
                 p = {"ini": dt_ini, "fim": dt_fim}
                 where_clauses = ["1=1"]
                 if v_id:
@@ -159,28 +221,19 @@ def analise_cliente():
                 if cliente_busca:
                     where_clauses.append("(cl.Codigo LIKE :b OR cl.Razao_Social LIKE :b)")
                     p["b"] = f"%{cliente_busca}%"
-                
-                sql_b = text(f"""
-                    SELECT TOP 50 cl.Codigo, cl.Razao_Social AS [Razao Social], ve.Nome_guerra AS [Vendedor], SUM(ISNULL(cb.Vlr_TotalNota,0)) as [Valor_Total_NF_R$] 
-                    FROM clien cl 
-                    LEFT JOIN enxes en ON cl.Cgc_Cpf = en.Num_CgcCpf 
-                    LEFT JOIN vende ve ON en.Cod_Vendedor = ve.codigo 
-                    LEFT JOIN NFSCB cb ON cb.Cod_Cliente = cl.Codigo AND cb.Status = 'F' AND cb.Cod_Estabe = 0 AND cb.Dat_Emissao BETWEEN :ini AND :fim 
-                    WHERE {" AND ".join(where_clauses)} 
-                    GROUP BY cl.Codigo, cl.Razao_Social, ve.Nome_guerra ORDER BY [Valor_Total_NF_R$] DESC
-                """)
+
+                sql_b = text(f"SELECT TOP 50 cl.Codigo, cl.Razao_Social AS [Razao Social], ve.Nome_guerra AS [Vendedor], SUM(ISNULL(cb.Vlr_TotalNota,0)) as [Valor_Total_NF_R$] FROM clien cl LEFT JOIN enxes en ON cl.Cgc_Cpf = en.Num_CgcCpf LEFT JOIN vende ve ON en.Cod_Vendedor = ve.codigo LEFT JOIN NFSCB cb ON cb.Cod_Cliente = cl.Codigo AND cb.Status = 'F' AND cb.Cod_Estabe = 0 AND cb.Dat_Emissao BETWEEN :ini AND :fim WHERE {' AND '.join(where_clauses)} GROUP BY cl.Codigo, cl.Razao_Social, ve.Nome_guerra ORDER BY [Valor_Total_NF_R$] DESC")
                 dados_busca = pd.read_sql(sql_b, conn, params=p).to_dict('records')
             else:
-                # Ranking padrão
                 sql_r = text("SELECT cl.Codigo, cl.Razao_Social AS [Razao Social], SUM(ISNULL(cb.Vlr_TotalNota,0)) as Total FROM clien cl INNER JOIN NFSCB cb ON cb.Cod_Cliente = cl.Codigo WHERE cb.Status = 'F' AND cb.Cod_Estabe = 0 AND cb.Dat_Emissao BETWEEN :ini AND :fim GROUP BY cl.Codigo, cl.Razao_Social HAVING SUM(ISNULL(cb.Vlr_TotalNota,0)) > 0")
                 df_all = pd.read_sql(sql_r, conn, params={"ini": dt_ini, "fim": dt_fim})
                 if not df_all.empty:
                     ranking_mais = df_all.sort_values(by='Total', ascending=False).head(10).to_dict('records')
                     ranking_menos = df_all.sort_values(by='Total', ascending=True).head(10).to_dict('records')
 
-    return render_template('analise_cliente.html', vendedores=vendedores, ranking_mais=ranking_mais, ranking_menos=ranking_menos, dados=dados_busca, 
-                           cliente_detalhe=cliente_detalhe, stats_detalhe=stats_detalhe, graficos=graficos, data_inicio=data_ini_str, data_fim=data_fim_str, 
-                           vendedor_sel=v_id, cliente_busca=cliente_busca, financeiro=fin_status, faturas_3m=faturas_3m)
+    return render_template('analise_cliente.html', vendedores=vendedores, ranking_mais=ranking_mais, ranking_menos=ranking_menos, dados=dados_busca,
+                           cliente_detalhe=cliente_detalhe, stats_detalhe=stats_detalhe, graficos=graficos, data_inicio=data_ini_str, data_fim=data_fim_str,
+                           vendedor_sel=v_id, cliente_busca=cliente_busca, financeiro=fin_status, faturas_3m=faturas_3m, recomendacoes=recomendacoes)
 
 @app.route('/pedidos_eletronicos')
 @login_required

@@ -68,16 +68,14 @@
                                 {{ financeiro.status | upper }}: R$ {{ "%.2f"|format(financeiro.total_vencido if financeiro.status == 'Inadimplente' else financeiro.total_aberto) }} {{ 'EM ATRASO' if financeiro.status == 'Inadimplente' else 'EM ABERTO' }}
                             </span>
                         </div>
-
                         <div class="d-flex align-items-center">
                             {% for f in faturas_3m %}
-                            <div class="bg-secondary bg-opacity-25 rounded px-2 py-1 mx-1 border border-secondary text-center" style="min-width: 120px; font-size: 0.75rem;">
+                            <div class="bg-secondary bg-opacity-25 rounded px-2 py-1 mx-1 border border-secondary text-center" style="min-width: 100px; font-size: 0.75rem;">
                                 <div class="text-info fw-bold">Mês: {{ f.Mes }}/{{ f.Ano }}</div>
                                 <div class="fw-bold text-white">R$ {{ "%.2f"|format(f.Total) }}</div>
                             </div>
                             {% endfor %}
                         </div>
-
                         <div class="text-end ms-3">
                             <small class="text-muted d-block" style="font-size: 0.65rem;">LIMITE / SALDO DISPONÍVEL</small>
                             <h6 class="text-info mb-0 fw-bold">Lim: R$ {{ "%.2f"|format(cliente_detalhe.limite or 0) }}</h6>
@@ -87,6 +85,74 @@
                 </div>
             </div>
         </div>
-        {% endif %}
+
+        <div class="row">
+            <div class="col-md-3 mb-4">
+                <div class="card border-left-warning shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Métricas (Período)</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ recomendacoes.total_notas }} Pedidos</div>
+                        <div class="text-xs text-muted mt-2"><i class="bi bi-clock-history"></i> Última: <strong>{{ recomendacoes.dias_inatividade }} dias atrás</strong></div>
+                        <div class="text-xs text-success mt-1">Ticket Médio: R$ {{ "%.2f"|format(recomendacoes.valor_total / recomendacoes.total_notas if recomendacoes.total_notas > 0 else 0) }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-5 mb-4">
+                <div class="card shadow h-100">
+                    <div class="card-header bg-primary text-white py-2"><h6 class="m-0 font-weight-bold small"><i class="bi bi-lightbulb"></i> Sugestões de Venda</h6></div>
+                    <div class="card-body p-2">
+                        <ul class="list-group list-group-flush small">
+                        {% for sug in recomendacoes.sugeridos %}<li class="list-group-item py-1 border-0 rounded bg-light mb-1"><i class="bi bi-arrow-up-right text-success"></i> {{ sug }}</li>
+                        {% else %}<li class="list-group-item py-1 text-muted">Sem recomendações de afinidade.</li>{% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card shadow h-100">
+                    <div class="card-header bg-dark text-white py-2"><h6 class="m-0 font-weight-bold small"><i class="bi bi-cart-check"></i> Itens Preferidos</h6></div>
+                    <div class="card-body p-2 d-flex flex-wrap gap-1">
+                        {% for prod in recomendacoes.comprados %}<span class="badge bg-info text-dark" style="font-size: 0.65rem;">{{ prod }}</span>{% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card shadow mb-4">
+                    <div class="card-header py-2 bg-white d-flex align-items-center"><h6 class="m-0 font-weight-bold text-success"><i class="bi bi-bar-chart-fill"></i> Histórico Mensal de Faturamento</h6></div>
+                    <div class="card-body p-1">
+                        <div id="chart-evolution"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow mb-4">
+                    <div class="card-header py-2 bg-white"><h6 class="m-0 font-weight-bold text-primary small">Ranking de Itens (Qtd)</h6></div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height: 350px;">
+                            <table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
+                                <thead class="bg-light sticky-top"><tr><th>Produto</th><th class="text-end">Qtd</th></tr></thead>
+                                <tbody>
+                                    {% for p in stats_detalhe.top_10_mais %}
+                                    <tr><td>{{ p.Produto }}</td><td class="text-end fw-bold text-success">{{ p.Qtd }}</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 </div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    {% if graficos.evolucao_compras %}
+    var graphEvolution = {{ graficos.evolucao_compras | safe }};
+    Plotly.newPlot('chart-evolution', graphEvolution.data, graphEvolution.layout, {responsive: true});
+    {% endif %}
+</script>
 {% endblock %}
