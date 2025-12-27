@@ -1,28 +1,18 @@
 {% extends "base.html" %}
-
-{% block title %}Análise de Clientes{% endblock %}
-
 {% block content %}
 <div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col-12 d-sm-flex align-items-center justify-content-between">
-            <h1 class="h3 mb-0 text-gray-800">BI - Análise de Performance de Clientes</h1>
-            <a href="{{ url_for('analise_cliente') }}" class="btn btn-sm btn-outline-secondary shadow-sm"><i class="bi bi-arrow-clockwise"></i> Resetar Vista</a>
-        </div>
-    </div>
-
     <div class="card shadow mb-4 border-left-primary">
         <div class="card-body">
             <form method="GET" action="{{ url_for('analise_cliente') }}" class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label fw-bold">Buscar por Nome ou Código</label>
                     <div class="input-group">
-                        <input type="text" name="cliente_busca" class="form-control" placeholder="Ex: 1234 ou Farmácia..." value="{{ cliente_busca }}">
+                        <input type="text" name="cliente_busca" class="form-control" value="{{ cliente_busca }}">
                         <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label fw-bold">Período de Emissão</label>
+                    <label class="form-label fw-bold">Período (Faturamento Estab. 0)</label>
                     <div class="input-group">
                         <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
                         <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
@@ -31,178 +21,72 @@
                 <div class="col-md-3">
                     <label class="form-label fw-bold">Vendedor</label>
                     <select name="vendedor_id" class="form-select">
-                        <option value="">-- Todos os Vendedores --</option>
+                        <option value="">-- Todos --</option>
                         {% for v in vendedores %}
                         <option value="{{ v.Codigo }}" {% if vendedor_sel|string == v.Codigo|string %}selected{% endif %}>{{ v.Nome_Guerra }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <button type="submit" class="btn btn-success w-100">Filtrar</button>
-                </div>
+                <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-success w-100">Filtrar</button></div>
             </form>
         </div>
     </div>
 
     {% if not cliente_detalhe %}
-        
-        {% if not cliente_busca and not vendedor_sel %}
-        <div class="row">
-            <div class="col-lg-6 mb-4">
-                <div class="card shadow">
-                    <div class="card-header py-3 bg-success text-white">
-                        <h6 class="m-0 font-weight-bold"><i class="bi bi-trophy"></i> Top 10 Clientes (Mais Compraram no Mês)</h6>
-                    </div>
-                    <div class="card-body p-0">
-                        <table class="table table-hover table-sm mb-0">
-                            <thead class="bg-light">
-                                <tr><th>Cliente</th><th class="text-end">Total R$</th><th class="text-center">Ação</th></tr>
-                            </thead>
-                            <tbody class="small">
-                                {% for r in ranking_mais %}
-                                <tr>
-                                    <td>{{ r['Razao Social'] }}</td>
-                                    <td class="text-end fw-bold">R$ {{ "%.2f"|format(r['Total']) }}</td>
-                                    <td class="text-center">
-                                        <a href="{{ url_for('analise_cliente', cliente_id=r['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-primary btn-sm py-0">Analisar</a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-6 mb-4">
-                <div class="card shadow">
-                    <div class="card-header py-3 bg-warning text-dark">
-                        <h6 class="m-0 font-weight-bold"><i class="bi bi-exclamation-triangle"></i> Top 10 Clientes (Menos Compraram no Mês)</h6>
-                    </div>
-                    <div class="card-body p-0">
-                        <table class="table table-hover table-sm mb-0">
-                            <thead class="bg-light">
-                                <tr><th>Cliente</th><th class="text-end">Total R$</th><th class="text-center">Ação</th></tr>
-                            </thead>
-                            <tbody class="small">
-                                {% for r in ranking_menos %}
-                                <tr>
-                                    <td>{{ r['Razao Social'] }}</td>
-                                    <td class="text-end fw-bold">R$ {{ "%.2f"|format(r['Total']) }}</td>
-                                    <td class="text-center">
-                                        <a href="{{ url_for('analise_cliente', cliente_id=r['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-primary btn-sm py-0">Analisar</a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
         {% if dados %}
         <div class="card shadow mb-4">
-            <div class="card-header py-3 bg-dark text-white"><h6 class="m-0 font-weight-bold">Resultados do Filtro</h6></div>
+            <div class="card-header bg-dark text-white"><h6 class="m-0 font-weight-bold">Resultados da Busca</h6></div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover">
-                        <thead>
-                            <tr><th>Código</th><th>Razão Social</th><th>Vendedor</th><th class="text-end">Total</th><th class="text-center">Ação</th></tr>
-                        </thead>
-                        <tbody>
-                            {% for c in dados %}
-                            <tr>
-                                <td>{{ c['Codigo'] }}</td>
-                                <td>{{ c['Razao Social'] }}</td>
-                                <td>{{ c['Vendedor'] }}</td>
-                                <td class="text-end fw-bold">R$ {{ "%.2f"|format(c['Valor_Total_NF_R$'] or 0) }}</td>
-                                <td class="text-center">
-                                    <a href="{{ url_for('analise_cliente', cliente_id=c['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-primary btn-sm py-0">Analisar</a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                <table class="table table-sm table-hover">
+                    <thead><tr><th>Código</th><th>Razão Social</th><th>Vendedor</th><th class="text-end">Total</th><th>Ação</th></tr></thead>
+                    <tbody>
+                        {% for c in dados %}
+                        <tr>
+                            <td>{{ c['Codigo'] }}</td>
+                            <td>{{ c['Razao Social'] }}</td>
+                            <td>{{ c['Vendedor'] }}</td>
+                            <td class="text-end fw-bold">R$ {{ "%.2f"|format(c['Valor_Total_NF_R$'] or 0) }}</td>
+                            <td><a href="{{ url_for('analise_cliente', cliente_id=c['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-primary btn-sm">Analisar</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
+        {% elif cliente_busca or vendedor_sel %}
+            <div class="alert alert-warning">Nenhum cliente encontrado para os critérios informados.</div>
         {% endif %}
-
     {% else %}
         <div class="row">
             <div class="col-12 mb-4">
                 <div class="card bg-dark text-white shadow border-left-success">
-                    <div class="card-body d-flex justify-content-between align-items-center">
-                        <div>
-                            <h4 class="mb-0 text-success">{{ cliente_detalhe.nome }} ({{ cliente_detalhe.codigo }})</h4>
-                            <div class="mt-2">
-                                {% if financeiro.status == 'Inadimplente' %}
-                                    <span class="badge bg-danger shadow-sm">
-                                        <i class="bi bi-exclamation-octagon"></i> INADIMPLENTE: R$ {{ "%.2f"|format(financeiro.total_vencido) }} EM ATRASO
-                                    </span>
-                                {% elif financeiro.status == 'Em dia' %}
-                                    <span class="badge bg-primary shadow-sm">
-                                        <i class="bi bi-check-circle"></i> EM DIA: R$ {{ "%.2f"|format(financeiro.total_aberto) }} EM ABERTO (A VENCER)
-                                    </span>
-                                {% else %}
-                                    <span class="badge bg-success shadow-sm">
-                                        <i class="bi bi-shield-check"></i> SEM PENDÊNCIAS FINANCEIRAS
-                                    </span>
-                                {% endif %}
+                    <div class="card-body d-flex flex-wrap align-items-center justify-content-between py-2">
+                        <div class="me-auto">
+                            <h5 class="mb-1 text-success fw-bold">{{ cliente_detalhe.nome }} ({{ cliente_detalhe.codigo }})</h5>
+                            <span class="badge {{ 'bg-danger' if financeiro.status == 'Inadimplente' else 'bg-primary' }} p-2">
+                                <i class="bi {{ 'bi-exclamation-octagon' if financeiro.status == 'Inadimplente' else 'bi-check-circle' }}"></i>
+                                {{ financeiro.status | upper }}: R$ {{ "%.2f"|format(financeiro.total_vencido if financeiro.status == 'Inadimplente' else financeiro.total_aberto) }} {{ 'EM ATRASO' if financeiro.status == 'Inadimplente' else 'EM ABERTO' }}
+                            </span>
+                        </div>
+
+                        <div class="d-flex align-items-center">
+                            {% for f in faturas_3m %}
+                            <div class="bg-secondary bg-opacity-25 rounded px-2 py-1 mx-1 border border-secondary text-center" style="min-width: 120px; font-size: 0.75rem;">
+                                <div class="text-info fw-bold">Mês: {{ f.Mes }}/{{ f.Ano }}</div>
+                                <div class="fw-bold text-white">R$ {{ "%.2f"|format(f.Total) }}</div>
                             </div>
+                            {% endfor %}
                         </div>
-                        <div class="text-end">
-                            <small class="text-muted d-block">LIMITE DE CRÉDITO</small>
-                            <h4 class="text-info">R$ {{ "%.2f"|format(cliente_detalhe.limite or 0) }}</h4>
+
+                        <div class="text-end ms-3">
+                            <small class="text-muted d-block" style="font-size: 0.65rem;">LIMITE / SALDO DISPONÍVEL</small>
+                            <h6 class="text-info mb-0 fw-bold">Lim: R$ {{ "%.2f"|format(cliente_detalhe.limite or 0) }}</h6>
+                            <h5 class="text-success mb-0 fw-bold">Saldo: R$ {{ "%.2f"|format(financeiro.saldo_disponivel) }}</h5>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="row">
-            <div class="col-lg-8"><div class="card shadow mb-4"><div class="card-body"><div id="chartProjection"></div></div></div></div>
-            <div class="col-lg-4"><div class="card shadow mb-4"><div class="card-body"><div id="chartProducts"></div></div></div></div>
-        </div>
-
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card shadow mb-4">
-                    <div class="card-header py-3 bg-success text-white"><h6 class="m-0 font-weight-bold">Top 10 Itens Adquiridos</h6></div>
-                    <div class="card-body p-0">
-                        <table class="table table-sm table-striped mb-0 small">
-                            <tbody>
-                                {% for p in stats_detalhe.top_10_mais %}
-                                <tr><td>{{ p.Produto }}</td><td class="text-center fw-bold">{{ p.Qtd_Produto }}</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card shadow mb-4">
-                    <div class="card-header py-3 bg-danger text-white"><h6 class="m-0 font-weight-bold">Top 10 Menos Adquiridos</h6></div>
-                    <div class="card-body p-0">
-                        <table class="table table-sm table-striped mb-0 small">
-                            <tbody>
-                                {% for p in stats_detalhe.top_10_menos %}
-                                <tr><td>{{ p.Produto }}</td><td class="text-center fw-bold">{{ p.Qtd_Produto }}</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    {% endif %}
+        {% endif %}
 </div>
-
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script>
-    {% if graficos.projection %}Plotly.newPlot('chartProjection', {{ graficos.projection | safe }}.data, {{ graficos.projection | safe }}.layout);{% endif %}
-    {% if graficos.products %}Plotly.newPlot('chartProducts', {{ graficos.products | safe }}.data, {{ graficos.products | safe }}.layout);{% endif %}
-</script>
 {% endblock %}
