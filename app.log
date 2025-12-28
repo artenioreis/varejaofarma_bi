@@ -1,0 +1,230 @@
+2025-12-28 16:26:14,221 - __main__ - INFO - Banco de dados inicializado com sucesso
+2025-12-28 16:26:14,222 - __main__ - INFO - Iniciando servidor Flask em http://0.0.0.0:5000
+2025-12-28 16:26:15,530 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.101.6:5000
+2025-12-28 16:26:15,531 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-12-28 16:26:15,533 - werkzeug - INFO -  * Restarting with stat
+2025-12-28 16:26:17,089 - __main__ - INFO - Banco de dados inicializado com sucesso
+2025-12-28 16:26:17,090 - __main__ - INFO - Iniciando servidor Flask em http://0.0.0.0:5000
+2025-12-28 16:26:17,121 - werkzeug - WARNING -  * Debugger is active!
+2025-12-28 16:26:17,125 - werkzeug - INFO -  * Debugger PIN: 120-517-003
+2025-12-28 16:26:20,317 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:20] "[32mGET / HTTP/1.1[0m" 302 -
+2025-12-28 16:26:20,484 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:33,347 - __main__ - INFO - Dashboard carregado com sucesso
+2025-12-28 16:26:33,393 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:33] "GET /dashboard HTTP/1.1" 200 -
+2025-12-28 16:26:33,593 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:33] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:26:33,595 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:33] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:38,279 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:38,289 - __main__ - ERROR - Erro ao buscar pedidos eletrônicos: (pyodbc.ProgrammingError) ('42S22', "[42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de coluna 'Num_Pedido' inválido. (207) (SQLExecDirectW); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Não foi possível preparar uma ou mais instruções. (8180)")
+[SQL: 
+                        SELECT
+                            ISNULL(pd.Tip_Pedido, 'O') as Tipo,
+                            SUM(ISNULL(cb.Vlr_TotalNota, 0)) as Valor,
+                            COUNT(DISTINCT cb.Num_Nota) as Qtd
+                        FROM NFSCB cb
+                        LEFT JOIN PDVCB pd 
+                            ON cb.Num_Pedido = pd.Numero 
+                            AND cb.Cod_Estabe = pd.Cod_Estabe
+                        WHERE cb.Cod_Estabe = 0
+                          AND cb.Status = 'F'
+                          AND cb.Ser_Nota IN ('1', 'EFC', 'ORC')
+                          AND cb.Dat_Emissao BETWEEN ? AND ?
+                          
+                        GROUP BY pd.Tip_Pedido
+                    ]
+[parameters: (datetime.datetime(2025, 12, 1, 0, 0), datetime.datetime(2025, 12, 28, 23, 59, 59))]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:26:38,310 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:38] "GET /pedidos_eletronicos HTTP/1.1" 200 -
+2025-12-28 16:26:38,378 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:38] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:38,381 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:38] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:26:43,857 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:43,860 - __main__ - INFO - Vendas por produto carregadas
+2025-12-28 16:26:43,868 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:43] "GET /vendas_produto HTTP/1.1" 200 -
+2025-12-28 16:26:43,920 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:43] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:43,936 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:43] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:26:45,160 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:45,166 - __main__ - ERROR - Erro ao buscar pedidos eletrônicos: (pyodbc.ProgrammingError) ('42S22', "[42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de coluna 'Num_Pedido' inválido. (207) (SQLExecDirectW); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Não foi possível preparar uma ou mais instruções. (8180)")
+[SQL: 
+                        SELECT
+                            ISNULL(pd.Tip_Pedido, 'O') as Tipo,
+                            SUM(ISNULL(cb.Vlr_TotalNota, 0)) as Valor,
+                            COUNT(DISTINCT cb.Num_Nota) as Qtd
+                        FROM NFSCB cb
+                        LEFT JOIN PDVCB pd 
+                            ON cb.Num_Pedido = pd.Numero 
+                            AND cb.Cod_Estabe = pd.Cod_Estabe
+                        WHERE cb.Cod_Estabe = 0
+                          AND cb.Status = 'F'
+                          AND cb.Ser_Nota IN ('1', 'EFC', 'ORC')
+                          AND cb.Dat_Emissao BETWEEN ? AND ?
+                          
+                        GROUP BY pd.Tip_Pedido
+                    ]
+[parameters: (datetime.datetime(2025, 12, 1, 0, 0), datetime.datetime(2025, 12, 28, 23, 59, 59))]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:26:45,170 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:45] "GET /pedidos_eletronicos HTTP/1.1" 200 -
+2025-12-28 16:26:45,226 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:45] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:45,240 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:45] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:26:46,149 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:46,215 - __main__ - INFO - Dashboard carregado com sucesso
+2025-12-28 16:26:46,218 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:46] "GET /dashboard HTTP/1.1" 200 -
+2025-12-28 16:26:46,269 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:46] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:46,281 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:46] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:26:47,888 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:47,890 - __main__ - INFO - Vendas por produto carregadas
+2025-12-28 16:26:47,893 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:47] "GET /vendas_produto HTTP/1.1" 200 -
+2025-12-28 16:26:47,956 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:47] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:47,970 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:47] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:26:48,816 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:48,819 - __main__ - INFO - Vendas por fabricante carregadas
+2025-12-28 16:26:48,828 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:48] "GET /vendas_fabricante HTTP/1.1" 200 -
+2025-12-28 16:26:48,882 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:48] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:48,896 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:48] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:26:49,485 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:49,488 - __main__ - INFO - Análise de cliente carregada
+2025-12-28 16:26:49,530 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:49] "[35m[1mGET /analise_cliente HTTP/1.1[0m" 500 -
+2025-12-28 16:26:49,593 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:49] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:49,597 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:49] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1[0m" 304 -
+2025-12-28 16:26:49,645 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:49] "GET /analise_cliente?__debugger__=yes&cmd=resource&f=console.png&s=sxUl1HPE1VyVVB4XhXCD HTTP/1.1" 200 -
+2025-12-28 16:26:52,741 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:52,745 - __main__ - INFO - Análise de cliente carregada
+2025-12-28 16:26:52,757 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:52] "[35m[1mGET /analise_cliente HTTP/1.1[0m" 500 -
+2025-12-28 16:26:52,814 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:52] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:52,828 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:52] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1[0m" 304 -
+2025-12-28 16:26:52,844 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:52] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=console.png&s=sxUl1HPE1VyVVB4XhXCD HTTP/1.1[0m" 304 -
+2025-12-28 16:26:58,668 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:26:58,674 - __main__ - ERROR - Erro ao buscar pedidos eletrônicos: (pyodbc.ProgrammingError) ('42S22', "[42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de coluna 'Num_Pedido' inválido. (207) (SQLExecDirectW); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Não foi possível preparar uma ou mais instruções. (8180)")
+[SQL: 
+                        SELECT
+                            ISNULL(pd.Tip_Pedido, 'O') as Tipo,
+                            SUM(ISNULL(cb.Vlr_TotalNota, 0)) as Valor,
+                            COUNT(DISTINCT cb.Num_Nota) as Qtd
+                        FROM NFSCB cb
+                        LEFT JOIN PDVCB pd 
+                            ON cb.Num_Pedido = pd.Numero 
+                            AND cb.Cod_Estabe = pd.Cod_Estabe
+                        WHERE cb.Cod_Estabe = 0
+                          AND cb.Status = 'F'
+                          AND cb.Ser_Nota IN ('1', 'EFC', 'ORC')
+                          AND cb.Dat_Emissao BETWEEN ? AND ?
+                          
+                        GROUP BY pd.Tip_Pedido
+                    ]
+[parameters: (datetime.datetime(2025, 12, 1, 0, 0), datetime.datetime(2025, 12, 28, 23, 59, 59))]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:26:58,677 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:58] "GET /pedidos_eletronicos HTTP/1.1" 200 -
+2025-12-28 16:26:58,727 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:58] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:26:58,741 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:26:58] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:27:56,515 - __main__ - INFO - Conexão estabelecida com ARTENIOREIS/DMD
+2025-12-28 16:27:56,519 - __main__ - INFO - Análise de cliente carregada
+2025-12-28 16:27:56,533 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:27:56] "[35m[1mGET /analise_cliente HTTP/1.1[0m" 500 -
+2025-12-28 16:27:56,599 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:27:56] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:27:56,603 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:27:56] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=debugger.js HTTP/1.1[0m" 304 -
+2025-12-28 16:27:56,620 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:27:56] "[36mGET /analise_cliente?__debugger__=yes&cmd=resource&f=console.png&s=sxUl1HPE1VyVVB4XhXCD HTTP/1.1[0m" 304 -
+2025-12-28 16:30:05,029 - werkzeug - INFO -  * Detected change in 'c:\\varejaofarma_bi\\app.py', reloading
+2025-12-28 16:30:05,377 - werkzeug - INFO -  * Restarting with stat
+2025-12-28 16:30:07,080 - __main__ - INFO - Banco de dados inicializado
+2025-12-28 16:30:07,080 - __main__ - INFO - Iniciando servidor em http://0.0.0.0:5000
+2025-12-28 16:30:07,114 - werkzeug - WARNING -  * Debugger is active!
+2025-12-28 16:30:07,120 - werkzeug - INFO -  * Debugger PIN: 120-517-003
+2025-12-28 16:30:09,567 - __main__ - INFO - Conexão OK: ARTENIOREIS/DMD
+2025-12-28 16:30:09,574 - __main__ - ERROR - Erro pedidos eletrônicos: (pyodbc.ProgrammingError) ('42S22', "[42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de coluna 'Numero' inválido. (207) (SQLExecDirectW); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Não foi possível preparar uma ou mais instruções. (8180)")
+[SQL: 
+                        SELECT
+                            ISNULL(pd.Tip_Pedido, 'O') as Tipo,
+                            SUM(ISNULL(cb.Vlr_TotalNota, 0)) as Valor,
+                            COUNT(DISTINCT cb.Num_Nota) as Qtd
+                        FROM NFSCB cb
+                        LEFT JOIN PDVCB pd 
+                            ON cb.Numero = pd.Numero
+                            AND cb.Cod_Estabe = pd.Cod_Estabe
+                        WHERE cb.Cod_Estabe = 0
+                          AND cb.Status = 'F'
+                          AND cb.Ser_Nota IN ('1', 'EFC', 'ORC')
+                          AND cb.Dat_Emissao BETWEEN ? AND ?
+                          
+                        GROUP BY pd.Tip_Pedido
+                    ]
+[parameters: (datetime.datetime(2025, 12, 1, 0, 0), datetime.datetime(2025, 12, 28, 23, 59, 59))]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:30:09,603 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:09] "GET /pedidos_eletronicos HTTP/1.1" 200 -
+2025-12-28 16:30:11,426 - __main__ - INFO - Conexão OK: ARTENIOREIS/DMD
+2025-12-28 16:30:11,433 - __main__ - ERROR - Erro pedidos eletrônicos: (pyodbc.ProgrammingError) ('42S22', "[42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de coluna 'Numero' inválido. (207) (SQLExecDirectW); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Não foi possível preparar uma ou mais instruções. (8180)")
+[SQL: 
+                        SELECT
+                            ISNULL(pd.Tip_Pedido, 'O') as Tipo,
+                            SUM(ISNULL(cb.Vlr_TotalNota, 0)) as Valor,
+                            COUNT(DISTINCT cb.Num_Nota) as Qtd
+                        FROM NFSCB cb
+                        LEFT JOIN PDVCB pd 
+                            ON cb.Numero = pd.Numero
+                            AND cb.Cod_Estabe = pd.Cod_Estabe
+                        WHERE cb.Cod_Estabe = 0
+                          AND cb.Status = 'F'
+                          AND cb.Ser_Nota IN ('1', 'EFC', 'ORC')
+                          AND cb.Dat_Emissao BETWEEN ? AND ?
+                          
+                        GROUP BY pd.Tip_Pedido
+                    ]
+[parameters: (datetime.datetime(2025, 12, 1, 0, 0), datetime.datetime(2025, 12, 28, 23, 59, 59))]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:30:11,437 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:11] "GET /pedidos_eletronicos HTTP/1.1" 200 -
+2025-12-28 16:30:11,588 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:11] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:30:11,591 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:11] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:30:12,326 - __main__ - INFO - Conexão OK: ARTENIOREIS/DMD
+2025-12-28 16:30:12,334 - __main__ - ERROR - Erro pedidos eletrônicos: (pyodbc.ProgrammingError) ('42S22', "[42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de coluna 'Numero' inválido. (207) (SQLExecDirectW); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Não foi possível preparar uma ou mais instruções. (8180)")
+[SQL: 
+                        SELECT
+                            ISNULL(pd.Tip_Pedido, 'O') as Tipo,
+                            SUM(ISNULL(cb.Vlr_TotalNota, 0)) as Valor,
+                            COUNT(DISTINCT cb.Num_Nota) as Qtd
+                        FROM NFSCB cb
+                        LEFT JOIN PDVCB pd 
+                            ON cb.Numero = pd.Numero
+                            AND cb.Cod_Estabe = pd.Cod_Estabe
+                        WHERE cb.Cod_Estabe = 0
+                          AND cb.Status = 'F'
+                          AND cb.Ser_Nota IN ('1', 'EFC', 'ORC')
+                          AND cb.Dat_Emissao BETWEEN ? AND ?
+                          
+                        GROUP BY pd.Tip_Pedido
+                    ]
+[parameters: (datetime.datetime(2025, 12, 1, 0, 0), datetime.datetime(2025, 12, 28, 23, 59, 59))]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:30:12,337 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:12] "GET /pedidos_eletronicos HTTP/1.1" 200 -
+2025-12-28 16:30:12,392 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:12] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:30:12,408 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:12] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:30:13,314 - __main__ - INFO - Conexão OK: ARTENIOREIS/DMD
+2025-12-28 16:30:13,320 - __main__ - ERROR - Erro análise cliente: (pyodbc.ProgrammingError) ('42S02', "[42S02] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de objeto 'CLIENTE' inválido. (208) (SQLExecDirectW)")
+[SQL: 
+                    SELECT 
+                        COUNT(DISTINCT Codigo) as total_clientes,
+                        ISNULL(AVG(CAST(Limite_Credito AS FLOAT)), 0) as ticket_medio_geral
+                    FROM CLIENTE
+                    WHERE Bloqueado = 0
+                ]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:30:13,341 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:13] "GET /analise_cliente HTTP/1.1" 200 -
+2025-12-28 16:30:13,411 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:13] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:30:13,414 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:13] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:30:15,491 - __main__ - INFO - Conexão OK: ARTENIOREIS/DMD
+2025-12-28 16:30:15,496 - __main__ - ERROR - Erro análise cliente: (pyodbc.ProgrammingError) ('42S02', "[42S02] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Nome de objeto 'CLIENTE' inválido. (208) (SQLExecDirectW)")
+[SQL: 
+                    SELECT 
+                        COUNT(DISTINCT Codigo) as total_clientes,
+                        ISNULL(AVG(CAST(Limite_Credito AS FLOAT)), 0) as ticket_medio_geral
+                    FROM CLIENTE
+                    WHERE Bloqueado = 0
+                ]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-12-28 16:30:15,498 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:15] "GET /analise_cliente HTTP/1.1" 200 -
+2025-12-28 16:30:15,542 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:15] "[36mGET /static/css/style.css HTTP/1.1[0m" 304 -
+2025-12-28 16:30:15,556 - werkzeug - INFO - 127.0.0.1 - - [28/Dec/2025 16:30:15] "[36mGET /static/images/Logo.png HTTP/1.1[0m" 304 -
+2025-12-28 16:30:33,781 - werkzeug - INFO -  * Detected change in 'c:\\varejaofarma_bi\\app.py', reloading
+2025-12-28 16:30:34,064 - werkzeug - INFO -  * Restarting with stat
+2025-12-28 16:46:41,809 - werkzeug - INFO -  * Restarting with stat
+2025-12-28 16:47:07,199 - werkzeug - INFO -  * Restarting with stat
+2025-12-28 19:50:01,120 - werkzeug - INFO -  * Restarting with stat
+2025-12-28 19:52:38,559 - werkzeug - INFO -  * Restarting with stat

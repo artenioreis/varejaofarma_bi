@@ -126,9 +126,9 @@ def analise_cliente():
             if not cliente_id and not cliente_busca and not v_id:
                 # Total de clientes ativos (com compras no período)
                 sql_ativos = text("""
-                    SELECT COUNT(DISTINCT Cod_Cliente) as total_ativos 
-                    FROM NFSCB 
-                    WHERE Status = 'F' AND Cod_Estabe = 0 
+                    SELECT COUNT(DISTINCT Cod_Cliente) as total_ativos
+                    FROM NFSCB
+                    WHERE Status = 'F' AND Cod_Estabe = 0
                     AND Dat_Emissao BETWEEN :ini AND :fim
                 """)
                 df_ativos = pd.read_sql(sql_ativos, conn, params={"ini": dt_ini, "fim": dt_fim})
@@ -176,7 +176,7 @@ def analise_cliente():
 
                 # Taxa de inadimplência
                 sql_inadimplencia = text("""
-                    SELECT 
+                    SELECT
                         SUM(CASE WHEN DATEDIFF(DAY, Dat_Vencimento, GETDATE()) > 0 THEN Vlr_Saldo ELSE 0 END) as valor_vencido,
                         SUM(Vlr_Saldo) as valor_total
                     FROM CTREC
@@ -188,7 +188,7 @@ def analise_cliente():
 
                 # Gráfico de evolução de clientes ativos por mês
                 sql_evolucao_clientes = text("""
-                    SELECT 
+                    SELECT
                         CAST(YEAR(Dat_Emissao) AS VARCHAR) + '/' + RIGHT('0' + CAST(MONTH(Dat_Emissao) AS VARCHAR), 2) as Periodo,
                         COUNT(DISTINCT Cod_Cliente) as Total_Clientes
                     FROM NFSCB
@@ -209,7 +209,7 @@ def analise_cliente():
                 # Gráfico de distribuição de clientes por faixa de compra - CORRIGIDO
                 sql_faixas = text("""
                     WITH ClientesCompras AS (
-                        SELECT 
+                        SELECT
                             Cod_Cliente,
                             SUM(Vlr_TotalNota) as Total
                         FROM NFSCB
@@ -217,19 +217,19 @@ def analise_cliente():
                         AND Dat_Emissao BETWEEN :ini AND :fim
                         GROUP BY Cod_Cliente
                     )
-                    SELECT 
+                    SELECT
                         FaixaValor as Faixa,
                         COUNT(*) as Quantidade
                     FROM (
-                        SELECT 
-                            CASE 
+                        SELECT
+                            CASE
                                 WHEN Total <= 1000 THEN 'Até R$ 1.000'
                                 WHEN Total <= 5000 THEN 'R$ 1.001 a R$ 5.000'
                                 WHEN Total <= 10000 THEN 'R$ 5.001 a R$ 10.000'
                                 WHEN Total <= 50000 THEN 'R$ 10.001 a R$ 50.000'
                                 ELSE 'Acima de R$ 50.000'
                             END as FaixaValor,
-                            CASE 
+                            CASE
                                 WHEN Total <= 1000 THEN 1
                                 WHEN Total <= 5000 THEN 2
                                 WHEN Total <= 10000 THEN 3
@@ -349,20 +349,20 @@ def analise_cliente():
                     ranking_mais = df_all.sort_values(by='Total', ascending=False).head(10).to_dict('records')
                     ranking_menos = df_all.sort_values(by='Total', ascending=True).head(10).to_dict('records')
 
-    return render_template('analise_cliente.html', 
-                          vendedores=vendedores, 
-                          ranking_mais=ranking_mais, 
-                          ranking_menos=ranking_menos, 
+    return render_template('analise_cliente.html',
+                          vendedores=vendedores,
+                          ranking_mais=ranking_mais,
+                          ranking_menos=ranking_menos,
                           dados=dados_busca,
-                          cliente_detalhe=cliente_detalhe, 
-                          stats_detalhe=stats_detalhe, 
-                          graficos=graficos, 
-                          data_inicio=data_ini_str, 
+                          cliente_detalhe=cliente_detalhe,
+                          stats_detalhe=stats_detalhe,
+                          graficos=graficos,
+                          data_inicio=data_ini_str,
                           data_fim=data_fim_str,
-                          vendedor_sel=v_id, 
-                          cliente_busca=cliente_busca, 
-                          financeiro=fin_status, 
-                          faturas_3m=faturas_3m, 
+                          vendedor_sel=v_id,
+                          cliente_busca=cliente_busca,
+                          financeiro=fin_status,
+                          faturas_3m=faturas_3m,
                           recomendacoes=recomendacoes,
                           visao_geral=visao_geral)
 
@@ -379,7 +379,143 @@ def vendas_produto(): return render_template('vendas_produto.html', vendedores=[
 
 @app.route('/vendas_fabricante')
 @login_required
-def vendas_fabricante(): return render_template('vendas_fabricante.html', vendedores=[], stats={'total_vendido':0})
+def vendas_fabricante():
+    """
+    Corrige o endpoint de Vendas por Fabricante vs Metas (VECOT).
+    Usa o SELECT fornecido pelo usuário como base e aplica filtros de data e vendedor.
+    Retorna para o template vendas_fabricante.html:
+      - vendedores: lista de vendedores
+      - vendas: registros resultantes da query (lista de dicts)
+      - stats: total_vendido, total_meta
+      - data_inicio / data_fim (strings)
+    Observações:
+      - Não altera outras rotas/funcionalidades.
+      - Trabalha de forma segura quando não há engine configurada.
+    """
+    engine = get_sql_engine()
+    hoje = datetime.now()
+    # Recebe datas no formato yyyy-mm-dd (compatível com outros endpoints)
+    data_inicio = request.args.get('data_inicio', hoje.replace(day=1).strftime('%Y-%m-%d'))
+    data_fim = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
+    vendedor_sel = request.args.get('vendedor_id', '').strip()
+
+    vendedores = []
+    vendas = []
+    stats = {'total_vendido': 0, 'total_meta': 0}
+
+    if engine:
+        with engine.connect() as conn:
+            # Carrega lista de vendedores (não bloqueados) para o filtro
+            try:
+                vendedores = pd.read_sql(text("SELECT Codigo, Nome_Guerra FROM VENDE WHERE bloqueado = 0 ORDER BY Nome_Guerra"), conn).to_dict('records')
+            except Exception:
+                vendedores = []
+
+            # Converte datas para YYYYMMDD para comparação com o exemplo SQL do usuário.
+            try:
+                dt_ini_obj = datetime.strptime(data_inicio, '%Y-%m-%d')
+                dt_fim_obj = datetime.strptime(data_fim, '%Y-%m-%d')
+            except Exception:
+                # fallback para hoje se parsing falhar
+                dt_ini_obj = hoje.replace(day=1)
+                dt_fim_obj = hoje
+
+            dt_ini_str = dt_ini_obj.strftime('%Y%m%d')
+            dt_fim_str = dt_fim_obj.strftime('%Y%m%d')
+
+            # Base SQL conforme fornecido, adaptada para receber parâmetros e opcional filtro de vendedor
+            sql = """
+            SELECT
+              x.Ano,
+              x.Mes,
+              x.Cod_Fabricante,
+              x.Fantasia,
+              x.CodVen,
+              x.Nome_Guerra,
+              ISNULL(v.Qtd_Cota, 0) AS Qtd_Cota_Mensal,
+              x.Unidades_Vendidas,
+              Faltam = CASE
+                WHEN ISNULL(v.Qtd_Cota, 0) - x.Unidades_Vendidas > 0
+                THEN ISNULL(v.Qtd_Cota, 0) - x.Unidades_Vendidas
+                ELSE 0
+              END,
+              Status = CASE
+                WHEN x.Unidades_Vendidas >= ISNULL(v.Qtd_Cota, 0) THEN 'META BATIDA'
+                ELSE 'PENDENTE'
+              END
+            FROM
+              (SELECT
+                YEAR(cb.Dat_Emissao) AS Ano,
+                MONTH(cb.Dat_Emissao) AS Mes,
+                pr.Cod_Fabricante,
+                fb.Fantasia,
+                ve.Codigo AS CodVen,
+                ve.Nome_Guerra,
+                Unidades_Vendidas = SUM(it.Qtd_Produto + it.Qtd_Bonificacao)
+              FROM NFSCB cb
+              INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Ser_Nota = it.Ser_Nota AND cb.Num_Nota = it.Num_Nota
+              INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo
+              INNER JOIN FABRI fb ON pr.Cod_Fabricante = fb.Codigo
+              INNER JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo
+              INNER JOIN SUPER su ON ve.Cod_Supervisor = su.Codigo
+              WHERE cb.Cod_Estabe = 0
+                AND su.Cod_Gerencia = 2
+                AND ve.Cod_Supervisor = 2
+                AND cb.Dat_Emissao >= :dt_ini
+                AND cb.Dat_Emissao <= :dt_fim
+                AND cb.Status = 'F'
+                AND cb.Tip_Saida = 'V'
+              GROUP BY
+                YEAR(cb.Dat_Emissao),
+                MONTH(cb.Dat_Emissao),
+                pr.Cod_Fabricante,
+                fb.Fantasia,
+                ve.Codigo,
+                ve.Nome_Guerra) x
+            LEFT JOIN VECOT v ON x.CodVen = v.Cod_Vendedor
+              AND x.Cod_Fabricante = v.Cod_Fabricante
+              AND x.Ano = v.Ano_Ref
+              AND x.Mes = v.Mes_Ref
+            WHERE 1=1
+            """
+
+            params = {"dt_ini": dt_ini_str, "dt_fim": dt_fim_str}
+
+            # Se foi informado um vendedor, aplica filtro (por código)
+            if vendedor_sel:
+                sql += " AND x.CodVen = :codven"
+                params["codven"] = vendedor_sel
+
+            sql += " ORDER BY x.Ano, x.Mes, x.Nome_Guerra"
+
+            try:
+                df = pd.read_sql(text(sql), conn, params=params)
+                if not df.empty:
+                    # Normaliza nomes de colunas para o template
+                    # Garante tipos certos
+                    df['Qtd_Cota_Mensal'] = df['Qtd_Cota_Mensal'].fillna(0).astype(float)
+                    df['Unidades_Vendidas'] = df['Unidades_Vendidas'].fillna(0).astype(float)
+                    df['Faltam'] = df['Faltam'].fillna(0).astype(float)
+                    vendas = df.to_dict('records')
+
+                    stats['total_vendido'] = int(df['Unidades_Vendidas'].sum())
+                    stats['total_meta'] = int(df['Qtd_Cota_Mensal'].sum())
+                else:
+                    vendas = []
+            except Exception as e:
+                # Em caso de erro na query, retornamos vazio mas não quebramos a aplicação.
+                vendas = []
+                # opcional: registrar/logar erro - aqui usamos flash para visibilidade no UI
+                flash(f'Erro ao obter dados de vendas por fabricante: {str(e)}', 'danger')
+
+    # Se engine não configurada, vendedores/vendas ficam vazios; template já trata isso.
+    return render_template('vendas_fabricante.html',
+                           vendedores=vendedores,
+                           vendas=vendas,
+                           stats=stats,
+                           data_inicio=data_inicio,
+                           data_fim=data_fim,
+                           vendedor_sel=vendedor_sel)
 
 if __name__ == '__main__':
     with app.app_context(): db.create_all()
