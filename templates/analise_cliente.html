@@ -1,158 +1,399 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container-fluid">
-    <div class="card shadow mb-4 border-left-primary">
-        <div class="card-body">
-            <form method="GET" action="{{ url_for('analise_cliente') }}" class="row g-3">
-                <div class="col-md-4">
-                    <label class="form-label fw-bold">Buscar por Nome ou Código</label>
-                    <div class="input-group">
-                        <input type="text" name="cliente_busca" class="form-control" value="{{ cliente_busca }}">
-                        <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i></button>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Análise de Clientes</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('analise_cliente') }}" method="get" class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Buscar por Nome ou Código</label>
+                        <input type="text" class="form-control" name="cliente_busca" value="{{ cliente_busca }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Período (Faturamento)</label>
+                        <div class="input-group">
+                            <input type="date" class="form-control" name="data_inicio" value="{{ data_inicio }}">
+                            <span class="input-group-text">até</span>
+                            <input type="date" class="form-control" name="data_fim" value="{{ data_fim }}">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Vendedor</label>
+                        <select class="form-select" name="vendedor_id">
+                            <option value="">-- Todos --</option>
+                            {% for v in vendedores %}
+                            <option value="{{ v.Codigo }}" {% if v.Codigo == vendedor_sel %}selected{% endif %}>{{ v.Nome_Guerra }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if not cliente_detalhe and not dados and not cliente_busca and not vendedor_sel %}
+<!-- Visão Geral de Clientes -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h5 class="card-title">Clientes Ativos</h5>
+                <h2 class="display-6">{{ visao_geral.total_clientes_ativos }}</h2>
+                <p class="card-text">No período selecionado</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">Novos Clientes</h5>
+                <h2 class="display-6">{{ visao_geral.novos_clientes }}</h2>
+                <p class="card-text">Primeira compra no período</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h5 class="card-title">Clientes Inativos</h5>
+                <h2 class="display-6">{{ visao_geral.clientes_inativos }}</h2>
+                <p class="card-text">Sem compras há 90+ dias</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <h5 class="card-title">Ticket Médio</h5>
+                <h2 class="display-6">R$ {{ "%.2f"|format(visao_geral.ticket_medio_geral) }}</h2>
+                <p class="card-text">Valor médio por pedido</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Evolução de Clientes Ativos</h6>
+            </div>
+            <div class="card-body">
+                {% if 'evolucao_clientes' in graficos %}
+                <div id="grafico-evolucao-clientes"></div>
+                <script>
+                    var graficoEvolucaoClientes = {{ graficos.evolucao_clientes | safe }};
+                    Plotly.newPlot('grafico-evolucao-clientes', graficoEvolucaoClientes.data, graficoEvolucaoClientes.layout);
+                </script>
+                {% else %}
+                <p class="text-muted">Nenhum dado disponível para o período selecionado.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Distribuição por Faixa de Compra</h6>
+            </div>
+            <div class="card-body">
+                {% if 'distribuicao_faixas' in graficos %}
+                <div id="grafico-distribuicao-faixas"></div>
+                <script>
+                    var graficoDistribuicaoFaixas = {{ graficos.distribuicao_faixas | safe }};
+                    Plotly.newPlot('grafico-distribuicao-faixas', graficoDistribuicaoFaixas.data, graficoDistribuicaoFaixas.layout);
+                </script>
+                {% else %}
+                <p class="text-muted">Nenhum dado disponível para o período selecionado.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h6 class="mb-0">Top 10 Clientes (Maior Faturamento)</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Razão Social</th>
+                                <th>Total</th>
+                                <th>Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in ranking_mais %}
+                            <tr>
+                                <td>{{ c['Codigo'] }}</td>
+                                <td>{{ c['Razao Social'] }}</td>
+                                <td>R$ {{ "%.2f"|format(c['Total']) }}</td>
+                                <td><a href="{{ url_for('analise_cliente', cliente_id=c['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-sm btn-primary">Analisar</a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-warning text-white">
+                <h6 class="mb-0">Clientes em Risco (Menor Faturamento)</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Razão Social</th>
+                                <th>Total</th>
+                                <th>Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in ranking_menos %}
+                            <tr>
+                                <td>{{ c['Codigo'] }}</td>
+                                <td>{{ c['Razao Social'] }}</td>
+                                <td>R$ {{ "%.2f"|format(c['Total']) }}</td>
+                                <td><a href="{{ url_for('analise_cliente', cliente_id=c['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-sm btn-primary">Analisar</a></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% elif not cliente_detalhe %}
+<!-- Resultados da Busca -->
+{% if dados %}
+<div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h6 class="mb-0">Resultados da Busca</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Razão Social</th>
+                        <th>Vendedor</th>
+                        <th>Total</th>
+                        <th>Ação</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in dados %}
+                    <tr>
+                        <td>{{ c['Codigo'] }}</td>
+                        <td>{{ c['Razao Social'] }}</td>
+                        <td>{{ c['Vendedor'] }}</td>
+                        <td>R$ {{ "%.2f"|format(c['Valor_Total_NF_R$'] or 0) }}</td>
+                        <td><a href="{{ url_for('analise_cliente', cliente_id=c['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-sm btn-primary">Analisar</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% elif cliente_busca or vendedor_sel %}
+<div class="alert alert-warning">
+    Nenhum cliente encontrado para os critérios informados.
+</div>
+{% endif %}
+
+{% else %}
+<!-- Detalhes do Cliente -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header {% if financeiro.status == 'Inadimplente' %}bg-danger{% else %}bg-success{% endif %} text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ cliente_detalhe.nome }} ({{ cliente_detalhe.codigo }})</h5>
+                    <span class="badge bg-light text-dark">
+                        {{ financeiro.status | upper }}: R$ {{ "%.2f"|format(financeiro.total_vencido if financeiro.status == 'Inadimplente' else financeiro.total_aberto) }} 
+                        {{ 'EM ATRASO' if financeiro.status == 'Inadimplente' else 'EM ABERTO' }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Histórico de Compras Recentes -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0">Histórico de Compras Recentes</h6>
+                            </div>
+                            <div class="card-body">
+                                {% for f in faturas_3m %}
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Mês: {{ f.Mes }}/{{ f.Ano }}</span>
+                                    <span class="fw-bold">R$ {{ "%.2f"|format(f.Total) }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Limite e Saldo -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h6 class="mb-0">LIMITE / SALDO DISPONÍVEL</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="mb-3">
+                                    <span class="text-muted">Lim:</span>
+                                    <h4>R$ {{ "%.2f"|format(cliente_detalhe.limite or 0) }}</h4>
+                                </div>
+                                <div>
+                                    <span class="text-muted">Saldo:</span>
+                                    <h3 class="{% if financeiro.saldo_disponivel < 0 %}text-danger{% else %}text-success{% endif %}">
+                                        R$ {{ "%.2f"|format(financeiro.saldo_disponivel) }}
+                                    </h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Métricas do Período -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-success text-white">
+                                <h6 class="mb-0">Métricas (Período)</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-4">
+                                        <h4>{{ recomendacoes.total_notas }}</h4>
+                                        <small class="text-muted">Pedidos</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h4>{{ recomendacoes.dias_inatividade }}</h4>
+                                        <small class="text-muted">Última: dias atrás</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h4>R$ {{ "%.2f"|format(recomendacoes.valor_total / recomendacoes.total_notas if recomendacoes.total_notas > 0 else 0) }}</h4>
+                                        <small class="text-muted">Ticket Médio</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">Período (Faturamento)</label>
-                    <div class="input-group">
-                        <input type="date" name="data_inicio" class="form-control form-control-sm" value="{{ data_inicio }}">
-                        <input type="date" name="data_fim" class="form-control form-control-sm" value="{{ data_fim }}">
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-bold">Vendedor</label>
-                    <select name="vendedor_id" class="form-select">
-                        <option value="">-- Todos --</option>
-                        {% for v in vendedores %}
-                        <option value="{{ v.Codigo }}" {% if vendedor_sel|string == v.Codigo|string %}selected{% endif %}>{{ v.Nome_Guerra }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2 d-flex align-items-end"><button type="submit" class="btn btn-success w-100">Filtrar</button></div>
-            </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Sugestões de Venda -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h6 class="mb-0">Sugestões de Venda</h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {% for sug in recomendacoes.sugeridos %}
+                    <li class="list-group-item">{{ sug }}</li>
+                    {% else %}
+                    <li class="list-group-item">Sem recomendações de afinidade.</li>
+                    {% endfor %}
+                </ul>
+            </div>
         </div>
     </div>
 
-    {% if not cliente_detalhe %}
-        {% if dados %}
-        <div class="card shadow mb-4">
-            <div class="card-header bg-dark text-white"><h6 class="m-0 font-weight-bold">Resultados da Busca</h6></div>
+    <!-- Itens Preferidos -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">Itens Preferidos</h6>
+            </div>
             <div class="card-body">
-                <table class="table table-sm table-hover">
-                    <thead><tr><th>Código</th><th>Razão Social</th><th>Vendedor</th><th class="text-end">Total</th><th>Ação</th></tr></thead>
-                    <tbody>
-                        {% for c in dados %}
-                        <tr>
-                            <td>{{ c['Codigo'] }}</td>
-                            <td>{{ c['Razao Social'] }}</td>
-                            <td>{{ c['Vendedor'] }}</td>
-                            <td class="text-end fw-bold">R$ {{ "%.2f"|format(c['Valor_Total_NF_R$'] or 0) }}</td>
-                            <td><a href="{{ url_for('analise_cliente', cliente_id=c['Codigo'], data_inicio=data_inicio, data_fim=data_fim) }}" class="btn btn-primary btn-sm">Analisar</a></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                <ul class="list-group">
+                    {% for prod in recomendacoes.comprados %}
+                    <li class="list-group-item">{{ prod }}</li>
+                    {% endfor %}
+                </ul>
             </div>
         </div>
-        {% elif cliente_busca or vendedor_sel %}
-            <div class="alert alert-warning">Nenhum cliente encontrado para os critérios informados.</div>
-        {% endif %}
-    {% else %}
-        <div class="row">
-            <div class="col-12 mb-4">
-                <div class="card bg-dark text-white shadow border-left-success">
-                    <div class="card-body d-flex flex-wrap align-items-center justify-content-between py-2">
-                        <div class="me-auto">
-                            <h5 class="mb-1 text-success fw-bold">{{ cliente_detalhe.nome }} ({{ cliente_detalhe.codigo }})</h5>
-                            <span class="badge {{ 'bg-danger' if financeiro.status == 'Inadimplente' else 'bg-primary' }} p-2">
-                                <i class="bi {{ 'bi-exclamation-octagon' if financeiro.status == 'Inadimplente' else 'bi-check-circle' }}"></i>
-                                {{ financeiro.status | upper }}: R$ {{ "%.2f"|format(financeiro.total_vencido if financeiro.status == 'Inadimplente' else financeiro.total_aberto) }} {{ 'EM ATRASO' if financeiro.status == 'Inadimplente' else 'EM ABERTO' }}
-                            </span>
-                        </div>
-                        <div class="d-flex align-items-center">
-                            {% for f in faturas_3m %}
-                            <div class="bg-secondary bg-opacity-25 rounded px-2 py-1 mx-1 border border-secondary text-center" style="min-width: 100px; font-size: 0.75rem;">
-                                <div class="text-info fw-bold">Mês: {{ f.Mes }}/{{ f.Ano }}</div>
-                                <div class="fw-bold text-white">R$ {{ "%.2f"|format(f.Total) }}</div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <div class="text-end ms-3">
-                            <small class="text-muted d-block" style="font-size: 0.65rem;">LIMITE / SALDO DISPONÍVEL</small>
-                            <h6 class="text-info mb-0 fw-bold">Lim: R$ {{ "%.2f"|format(cliente_detalhe.limite or 0) }}</h6>
-                            <h5 class="text-success mb-0 fw-bold">Saldo: R$ {{ "%.2f"|format(financeiro.saldo_disponivel) }}</h5>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-md-3 mb-4">
-                <div class="card border-left-warning shadow h-100 py-2">
-                    <div class="card-body">
-                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Métricas (Período)</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ recomendacoes.total_notas }} Pedidos</div>
-                        <div class="text-xs text-muted mt-2"><i class="bi bi-clock-history"></i> Última: <strong>{{ recomendacoes.dias_inatividade }} dias atrás</strong></div>
-                        <div class="text-xs text-success mt-1">Ticket Médio: R$ {{ "%.2f"|format(recomendacoes.valor_total / recomendacoes.total_notas if recomendacoes.total_notas > 0 else 0) }}</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-5 mb-4">
-                <div class="card shadow h-100">
-                    <div class="card-header bg-primary text-white py-2"><h6 class="m-0 font-weight-bold small"><i class="bi bi-lightbulb"></i> Sugestões de Venda</h6></div>
-                    <div class="card-body p-2">
-                        <ul class="list-group list-group-flush small">
-                        {% for sug in recomendacoes.sugeridos %}<li class="list-group-item py-1 border-0 rounded bg-light mb-1"><i class="bi bi-arrow-up-right text-success"></i> {{ sug }}</li>
-                        {% else %}<li class="list-group-item py-1 text-muted">Sem recomendações de afinidade.</li>{% endfor %}
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4 mb-4">
-                <div class="card shadow h-100">
-                    <div class="card-header bg-dark text-white py-2"><h6 class="m-0 font-weight-bold small"><i class="bi bi-cart-check"></i> Itens Preferidos</h6></div>
-                    <div class="card-body p-2 d-flex flex-wrap gap-1">
-                        {% for prod in recomendacoes.comprados %}<span class="badge bg-info text-dark" style="font-size: 0.65rem;">{{ prod }}</span>{% endfor %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="row">
-            <div class="col-lg-8">
-                <div class="card shadow mb-4">
-                    <div class="card-header py-2 bg-white d-flex align-items-center"><h6 class="m-0 font-weight-bold text-success"><i class="bi bi-bar-chart-fill"></i> Histórico Mensal de Faturamento</h6></div>
-                    <div class="card-body p-1">
-                        <div id="chart-evolution"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="card shadow mb-4">
-                    <div class="card-header py-2 bg-white"><h6 class="m-0 font-weight-bold text-primary small">Ranking de Itens (Qtd)</h6></div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive" style="max-height: 350px;">
-                            <table class="table table-sm table-hover mb-0" style="font-size: 0.75rem;">
-                                <thead class="bg-light sticky-top"><tr><th>Produto</th><th class="text-end">Qtd</th></tr></thead>
-                                <tbody>
-                                    {% for p in stats_detalhe.top_10_mais %}
-                                    <tr><td>{{ p.Produto }}</td><td class="text-end fw-bold text-success">{{ p.Qtd }}</td></tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    {% endif %}
+    </div>
 </div>
 
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script>
-    {% if graficos.evolucao_compras %}
-    var graphEvolution = {{ graficos.evolucao_compras | safe }};
-    Plotly.newPlot('chart-evolution', graphEvolution.data, graphEvolution.layout, {responsive: true});
-    {% endif %}
-</script>
+<div class="row mb-4">
+    <!-- Histórico Mensal de Faturamento -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0">Histórico Mensal de Faturamento</h6>
+            </div>
+            <div class="card-body">
+                {% if 'evolucao_compras' in graficos %}
+                <div id="grafico-evolucao"></div>
+                <script>
+                    var graficoEvolucao = {{ graficos.evolucao_compras | safe }};
+                    Plotly.newPlot('grafico-evolucao', graficoEvolucao.data, graficoEvolucao.layout);
+                </script>
+                {% else %}
+                <p class="text-muted">Nenhum dado disponível para o período selecionado.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Ranking de Itens -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h6 class="mb-0">Ranking de Itens (Qtd)</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th class="text-end">Qtd</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in stats_detalhe.top_10_mais %}
+                            <tr>
+                                <td>{{ p.Produto }}</td>
+                                <td class="text-end">{{ p.Qtd }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}

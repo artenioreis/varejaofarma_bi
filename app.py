@@ -102,6 +102,13 @@ def analise_cliente():
     cliente_detalhe, stats_detalhe, graficos, faturas_3m = None, {}, {}, []
     recomendacoes = {'comprados': [], 'sugeridos': [], 'total_notas': 0, 'valor_total': 0, 'dias_inatividade': 0}
     fin_status = {'status': 'Sem Pendências', 'total_aberto': 0, 'total_vencido': 0, 'saldo_disponivel': 0}
+    visao_geral = {
+        'total_clientes_ativos': 0,
+        'novos_clientes': 0,
+        'clientes_inativos': 0,
+        'ticket_medio_geral': 0,
+        'inadimplencia': 0,
+    }
 
     v_id = request.args.get('vendedor_id', '').strip()
     cliente_id = request.args.get('cliente_id', '').strip()
@@ -114,6 +121,133 @@ def analise_cliente():
         with engine.connect() as conn:
             vendedores = pd.read_sql(text("SELECT Codigo, Nome_Guerra FROM VENDE WHERE bloqueado = 0 ORDER BY Nome_Guerra"), conn).to_dict('records')
             dt_ini, dt_fim = datetime.strptime(data_ini_str, '%Y-%m-%d'), datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59)
+
+            # Adicionar métricas de visão geral quando nenhum cliente específico for selecionado
+            if not cliente_id and not cliente_busca and not v_id:
+                # Total de clientes ativos (com compras no período)
+                sql_ativos = text("""
+                    SELECT COUNT(DISTINCT Cod_Cliente) as total_ativos 
+                    FROM NFSCB 
+                    WHERE Status = 'F' AND Cod_Estabe = 0 
+                    AND Dat_Emissao BETWEEN :ini AND :fim
+                """)
+                df_ativos = pd.read_sql(sql_ativos, conn, params={"ini": dt_ini, "fim": dt_fim})
+                if not df_ativos.empty:
+                    visao_geral['total_clientes_ativos'] = df_ativos.iloc[0]['total_ativos']
+
+                # Novos clientes (primeira compra no período)
+                sql_novos = text("""
+                    SELECT COUNT(*) as novos_clientes FROM (
+                        SELECT Cod_Cliente, MIN(Dat_Emissao) as primeira_compra
+                        FROM NFSCB
+                        WHERE Status = 'F' AND Cod_Estabe = 0
+                        GROUP BY Cod_Cliente
+                        HAVING MIN(Dat_Emissao) BETWEEN :ini AND :fim
+                    ) as NovosClientes
+                """)
+                df_novos = pd.read_sql(sql_novos, conn, params={"ini": dt_ini, "fim": dt_fim})
+                if not df_novos.empty:
+                    visao_geral['novos_clientes'] = df_novos.iloc[0]['novos_clientes']
+
+                # Clientes inativos (sem compras há mais de 90 dias)
+                sql_inativos = text("""
+                    SELECT COUNT(*) as inativos FROM (
+                        SELECT Cod_Cliente, MAX(Dat_Emissao) as ultima_compra
+                        FROM NFSCB
+                        WHERE Status = 'F' AND Cod_Estabe = 0
+                        GROUP BY Cod_Cliente
+                        HAVING DATEDIFF(DAY, MAX(Dat_Emissao), GETDATE()) > 90
+                    ) as ClientesInativos
+                """)
+                df_inativos = pd.read_sql(sql_inativos, conn, params={})
+                if not df_inativos.empty:
+                    visao_geral['clientes_inativos'] = df_inativos.iloc[0]['inativos']
+
+                # Ticket médio geral
+                sql_ticket = text("""
+                    SELECT AVG(Vlr_TotalNota) as ticket_medio
+                    FROM NFSCB
+                    WHERE Status = 'F' AND Cod_Estabe = 0
+                    AND Dat_Emissao BETWEEN :ini AND :fim
+                """)
+                df_ticket = pd.read_sql(sql_ticket, conn, params={"ini": dt_ini, "fim": dt_fim})
+                if not df_ticket.empty:
+                    visao_geral['ticket_medio_geral'] = df_ticket.iloc[0]['ticket_medio'] or 0
+
+                # Taxa de inadimplência
+                sql_inadimplencia = text("""
+                    SELECT 
+                        SUM(CASE WHEN DATEDIFF(DAY, Dat_Vencimento, GETDATE()) > 0 THEN Vlr_Saldo ELSE 0 END) as valor_vencido,
+                        SUM(Vlr_Saldo) as valor_total
+                    FROM CTREC
+                    WHERE Status IN ('A','P') AND Vlr_Saldo > 0
+                """)
+                df_inadimplencia = pd.read_sql(sql_inadimplencia, conn, params={})
+                if not df_inadimplencia.empty and df_inadimplencia.iloc[0]['valor_total'] > 0:
+                    visao_geral['inadimplencia'] = (df_inadimplencia.iloc[0]['valor_vencido'] / df_inadimplencia.iloc[0]['valor_total']) * 100
+
+                # Gráfico de evolução de clientes ativos por mês
+                sql_evolucao_clientes = text("""
+                    SELECT 
+                        CAST(YEAR(Dat_Emissao) AS VARCHAR) + '/' + RIGHT('0' + CAST(MONTH(Dat_Emissao) AS VARCHAR), 2) as Periodo,
+                        COUNT(DISTINCT Cod_Cliente) as Total_Clientes
+                    FROM NFSCB
+                    WHERE Status = 'F' AND Cod_Estabe = 0
+                    AND Dat_Emissao BETWEEN DATEADD(MONTH, -12, :ini) AND :fim
+                    GROUP BY YEAR(Dat_Emissao), MONTH(Dat_Emissao)
+                    ORDER BY YEAR(Dat_Emissao), MONTH(Dat_Emissao)
+                """)
+                df_evolucao_clientes = pd.read_sql(sql_evolucao_clientes, conn, params={"ini": dt_ini, "fim": dt_fim})
+                if not df_evolucao_clientes.empty:
+                    fig_clientes = px.line(df_evolucao_clientes, x='Periodo', y='Total_Clientes',
+                                          title='Evolução de Clientes Ativos por Mês',
+                                          labels={'Total_Clientes': 'Nº de Clientes', 'Periodo': 'Mês/Ano'},
+                                          markers=True)
+                    fig_clientes.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20))
+                    graficos['evolucao_clientes'] = json.dumps(fig_clientes, cls=plotly.utils.PlotlyJSONEncoder)
+
+                # Gráfico de distribuição de clientes por faixa de compra - CORRIGIDO
+                sql_faixas = text("""
+                    WITH ClientesCompras AS (
+                        SELECT 
+                            Cod_Cliente,
+                            SUM(Vlr_TotalNota) as Total
+                        FROM NFSCB
+                        WHERE Status = 'F' AND Cod_Estabe = 0
+                        AND Dat_Emissao BETWEEN :ini AND :fim
+                        GROUP BY Cod_Cliente
+                    )
+                    SELECT 
+                        FaixaValor as Faixa,
+                        COUNT(*) as Quantidade
+                    FROM (
+                        SELECT 
+                            CASE 
+                                WHEN Total <= 1000 THEN 'Até R$ 1.000'
+                                WHEN Total <= 5000 THEN 'R$ 1.001 a R$ 5.000'
+                                WHEN Total <= 10000 THEN 'R$ 5.001 a R$ 10.000'
+                                WHEN Total <= 50000 THEN 'R$ 10.001 a R$ 50.000'
+                                ELSE 'Acima de R$ 50.000'
+                            END as FaixaValor,
+                            CASE 
+                                WHEN Total <= 1000 THEN 1
+                                WHEN Total <= 5000 THEN 2
+                                WHEN Total <= 10000 THEN 3
+                                WHEN Total <= 50000 THEN 4
+                                ELSE 5
+                            END as OrdemFaixa
+                        FROM ClientesCompras
+                    ) AS FaixasTemp
+                    GROUP BY FaixaValor, OrdemFaixa
+                    ORDER BY OrdemFaixa
+                """)
+                df_faixas = pd.read_sql(sql_faixas, conn, params={"ini": dt_ini, "fim": dt_fim})
+                if not df_faixas.empty:
+                    fig_faixas = px.pie(df_faixas, values='Quantidade', names='Faixa',
+                                       title='Distribuição de Clientes por Faixa de Compra',
+                                       color_discrete_sequence=px.colors.sequential.RdBu)
+                    fig_faixas.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20))
+                    graficos['distribuicao_faixas'] = json.dumps(fig_faixas, cls=plotly.utils.PlotlyJSONEncoder)
 
             if cliente_id:
                 df_cli = pd.read_sql(text("SELECT Codigo, Razao_Social, Limite_Credito FROM clien WHERE Codigo = :cid"), conn, params={"cid": cliente_id})
@@ -169,7 +303,7 @@ def analise_cliente():
                             'dias_inatividade': res_rec[4] or 0
                         }
 
-                    # Gráfico de Evolução com Valores nas Barras - CORRIGIDO
+                    # Gráfico de Evolução com Valores nas Barras
                     sql_evolucao = text("""
                         SELECT
                             CAST(YEAR(Dat_Emissao) AS VARCHAR) + '/' + RIGHT('0' + CAST(MONTH(Dat_Emissao) AS VARCHAR), 2) as Periodo,
@@ -182,30 +316,14 @@ def analise_cliente():
                     """)
                     df_evolucao = pd.read_sql(sql_evolucao, conn, params={"cid": cliente_id, "ini": dt_ini, "fim": dt_fim})
                     if not df_evolucao.empty:
-                        # Formatar os valores para exibição
-                        df_evolucao['Total_Formatado'] = df_evolucao['Total'].apply(lambda x: f"R$ {x:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
-
-                        fig = px.bar(df_evolucao, x='Periodo', y='Total', 
+                        fig = px.bar(df_evolucao, x='Periodo', y='Total', text='Total',
                                      title='Evolução Mensal de Compras (R$)',
                                      labels={'Total': 'Valor (R$)', 'Periodo': 'Mês/Ano'},
                                      color_discrete_sequence=['#28a745'])
-
-                        # Configuração para mostrar os valores formatados dentro das barras
-                        fig.update_traces(
-                            texttemplate='%{text}', 
-                            textposition='inside',
-                            text=df_evolucao['Total_Formatado']
-                        )
-
-                        fig.update_layout(
-                            height=350, 
-                            margin=dict(l=20, r=20, t=40, b=20),
-                            xaxis_title="Mês/Ano", 
-                            yaxis_title="Faturamento",
-                            uniformtext_minsize=10,
-                            uniformtext_mode='hide'
-                        )
-
+                        # Formatação para mostrar "R$ X.XXX,XX" dentro das barras
+                        fig.update_traces(texttemplate='R$ %{text:,.2f}', textposition='inside')
+                        fig.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20),
+                                          xaxis_title="Mês/Ano", yaxis_title="Faturamento")
                         graficos['evolucao_compras'] = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
                     df_res = pd.read_sql(text("SELECT pr.Descricao AS Produto, SUM(it.Qtd_Produto) AS Qtd FROM NFSCB cb INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Num_Nota = it.Num_Nota AND cb.Ser_Nota = it.Ser_Nota INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo WHERE cb.Cod_Cliente = :cid AND cb.Status = 'F' AND cb.Cod_Estabe = 0 AND cb.Dat_Emissao BETWEEN :ini AND :fim GROUP BY pr.Descricao"), conn, params={"cid": cliente_id, "ini": dt_ini, "fim": dt_fim})
@@ -231,9 +349,22 @@ def analise_cliente():
                     ranking_mais = df_all.sort_values(by='Total', ascending=False).head(10).to_dict('records')
                     ranking_menos = df_all.sort_values(by='Total', ascending=True).head(10).to_dict('records')
 
-    return render_template('analise_cliente.html', vendedores=vendedores, ranking_mais=ranking_mais, ranking_menos=ranking_menos, dados=dados_busca,
-                           cliente_detalhe=cliente_detalhe, stats_detalhe=stats_detalhe, graficos=graficos, data_inicio=data_ini_str, data_fim=data_fim_str,
-                           vendedor_sel=v_id, cliente_busca=cliente_busca, financeiro=fin_status, faturas_3m=faturas_3m, recomendacoes=recomendacoes)
+    return render_template('analise_cliente.html', 
+                          vendedores=vendedores, 
+                          ranking_mais=ranking_mais, 
+                          ranking_menos=ranking_menos, 
+                          dados=dados_busca,
+                          cliente_detalhe=cliente_detalhe, 
+                          stats_detalhe=stats_detalhe, 
+                          graficos=graficos, 
+                          data_inicio=data_ini_str, 
+                          data_fim=data_fim_str,
+                          vendedor_sel=v_id, 
+                          cliente_busca=cliente_busca, 
+                          financeiro=fin_status, 
+                          faturas_3m=faturas_3m, 
+                          recomendacoes=recomendacoes,
+                          visao_geral=visao_geral)  # Adicionado o parâmetro visao_geral
 
 @app.route('/pedidos_eletronicos')
 @login_required
