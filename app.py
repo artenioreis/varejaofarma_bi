@@ -107,7 +107,7 @@ def analise_cliente():
         'novos_clientes': 0,
         'clientes_inativos': 0,
         'ticket_medio_geral': 0,
-        'inadimplencia': 0,
+        'inadimplencia': 0
     }
 
     v_id = request.args.get('vendedor_id', '').strip()
@@ -364,7 +364,7 @@ def analise_cliente():
                           financeiro=fin_status, 
                           faturas_3m=faturas_3m, 
                           recomendacoes=recomendacoes,
-                          visao_geral=visao_geral)  # Adicionado o parâmetro visao_geral
+                          visao_geral=visao_geral)
 
 @app.route('/pedidos_eletronicos')
 @login_required

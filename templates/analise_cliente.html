@@ -83,7 +83,7 @@
 <div class="row mb-4">
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header bg-primary text-white">
                 <h6 class="mb-0">Evolução de Clientes Ativos</h6>
             </div>
             <div class="card-body">
@@ -101,7 +101,7 @@
     </div>
     <div class="col-md-6">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header bg-primary text-white">
                 <h6 class="mb-0">Distribuição por Faixa de Compra</h6>
             </div>
             <div class="card-body">
@@ -292,7 +292,7 @@
                                     </div>
                                     <div class="col-md-4">
                                         <h4>{{ recomendacoes.dias_inatividade }}</h4>
-                                        <small class="text-muted">Última: dias atrás</small>
+                                        <small class="text-muted">Dias desde última compra</small>
                                     </div>
                                     <div class="col-md-4">
                                         <h4>R$ {{ "%.2f"|format(recomendacoes.valor_total / recomendacoes.total_notas if recomendacoes.total_notas > 0 else 0) }}</h4>
