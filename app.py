@@ -122,7 +122,7 @@ def analise_cliente():
             dt_ini, dt_fim = datetime.strptime(data_ini_str, '%Y-%m-%d'), datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59)
 
             if not cliente_id and not cliente_busca and not v_id:
-                # Visão Geral completa restaurada
+                # Visão Geral Completa
                 df_ativos = pd.read_sql(text("SELECT COUNT(DISTINCT Cod_Cliente) as total_ativos FROM NFSCB WHERE Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao BETWEEN :ini AND :fim"), conn, params={"ini": dt_ini, "fim": dt_fim})
                 if not df_ativos.empty: visao_geral['total_clientes_ativos'] = df_ativos.iloc[0]['total_ativos']
                 
@@ -135,9 +135,6 @@ def analise_cliente():
                 df_ticket = pd.read_sql(text("SELECT AVG(Vlr_TotalNota) as ticket_medio FROM NFSCB WHERE Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao BETWEEN :ini AND :fim"), conn, params={"ini": dt_ini, "fim": dt_fim})
                 if not df_ticket.empty: visao_geral['ticket_medio_geral'] = df_ticket.iloc[0]['ticket_medio'] or 0
 
-                df_inad = pd.read_sql(text("SELECT SUM(CASE WHEN DATEDIFF(DAY, Dat_Vencimento, GETDATE()) > 0 THEN Vlr_Saldo ELSE 0 END) as v_venc, SUM(Vlr_Saldo) as v_tot FROM CTREC WHERE Status IN ('A','P') AND Vlr_Saldo > 0"), conn)
-                if not df_inad.empty and df_inad.iloc[0]['v_tot'] > 0: visao_geral['inadimplencia'] = (df_inad.iloc[0]['v_venc'] / df_inad.iloc[0]['v_tot']) * 100
-
                 df_ev_cli = pd.read_sql(text("SELECT CAST(YEAR(Dat_Emissao) AS VARCHAR) + '/' + RIGHT('0' + CAST(MONTH(Dat_Emissao) AS VARCHAR), 2) as Periodo, COUNT(DISTINCT Cod_Cliente) as Total_Clientes FROM NFSCB WHERE Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao BETWEEN DATEADD(MONTH, -12, :ini) AND :fim GROUP BY YEAR(Dat_Emissao), MONTH(Dat_Emissao) ORDER BY 1"), conn, params={"ini": dt_ini, "fim": dt_fim})
                 if not df_ev_cli.empty:
                     graficos['evolucao_clientes'] = json.dumps(px.line(df_ev_cli, x='Periodo', y='Total_Clientes', title='Evolução de Clientes Ativos', markers=True), cls=plotly.utils.PlotlyJSONEncoder)
@@ -149,7 +146,6 @@ def analise_cliente():
                     ranking_menos = df_all.sort_values(by='Total', ascending=True).head(10).to_dict('records')
 
             if cliente_id:
-                # Lógica completa do botão Analisar restaurada
                 df_cli = pd.read_sql(text("SELECT Codigo, Razao_Social, Limite_Credito FROM clien WHERE Codigo = :cid"), conn, params={"cid": cliente_id})
                 if not df_cli.empty:
                     c = df_cli.iloc[0]
@@ -163,39 +159,6 @@ def analise_cliente():
                         venc = df_fin[df_fin['Dias'] < 0]
                         if not venc.empty: fin_status['status'], fin_status['total_vencido'] = 'Inadimplente', venc['Vlr_Saldo'].sum()
                         else: fin_status['status'] = 'Em dia'
-
-                    sql_rec = text("""
-                        WITH ClienteProdutos AS (
-                            SELECT cb.Cod_Cliente, it.Cod_Produto, p.Descricao as Produto, p.Cod_Fabricante,
-                                   SUM(it.Qtd_Produto) AS QtdTotal, COUNT(DISTINCT cb.Num_Nota) AS QtdCompras
-                            FROM NFSIT it
-                            INNER JOIN NFSCB cb ON it.Num_Nota = cb.Num_Nota AND it.Ser_Nota = cb.Ser_Nota AND it.Cod_Estabe = cb.Cod_Estabe
-                            INNER JOIN PRODU p ON it.Cod_Produto = p.Codigo
-                            WHERE cb.Dat_Emissao BETWEEN :ini AND :fim AND cb.Status = 'F' AND cb.Cod_Estabe = 0
-                            GROUP BY cb.Cod_Cliente, it.Cod_Produto, p.Descricao, p.Cod_Fabricante
-                        ),
-                        ProdutosRelacionados AS (
-                            SELECT cp1.Cod_Cliente, cp2.Produto as Relacionado, cp1.Produto as Base, COUNT(DISTINCT cp2.Cod_Cliente) as Popularidade
-                            FROM ClienteProdutos cp1
-                            JOIN ClienteProdutos cp2 ON cp2.Cod_Cliente <> cp1.Cod_Cliente AND cp2.Cod_Fabricante = cp1.Cod_Fabricante
-                            WHERE cp1.Cod_Cliente = :cid
-                            GROUP BY cp1.Cod_Cliente, cp2.Produto, cp1.Produto
-                        )
-                        SELECT
-                            (SELECT TOP 5 cp.Produto + ' (' + CAST(CAST(cp.QtdTotal AS INT) AS VARCHAR) + ' un);'
-                             FROM ClienteProdutos cp WHERE cp.Cod_Cliente = :cid ORDER BY cp.QtdTotal DESC FOR XML PATH('')) as TopComprados,
-                            (SELECT TOP 5 pr.Relacionado + ' (Base: ' + pr.Base + ');'
-                             FROM ProdutosRelacionados pr WHERE pr.Cod_Cliente = :cid ORDER BY pr.Popularidade DESC FOR XML PATH('')) as TopSugeridos,
-                            COUNT(DISTINCT Num_Nota) as Notas, SUM(Vlr_TotalNota) as Total, DATEDIFF(DAY, MAX(Dat_Emissao), GETDATE()) as Dias
-                        FROM NFSCB WHERE Cod_Cliente = :cid AND Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao BETWEEN :ini AND :fim
-                    """)
-                    res_rec = conn.execute(sql_rec, {"cid": cliente_id, "ini": dt_ini, "fim": dt_fim}).fetchone()
-                    if res_rec:
-                        recomendacoes = {
-                            'comprados': [x.strip() for x in (res_rec[0].split(';') if res_rec[0] else []) if x.strip()],
-                            'sugeridos': [x.strip() for x in (res_rec[1].split(';') if res_rec[1] else []) if x.strip()],
-                            'total_notas': res_rec[2] or 0, 'valor_total': res_rec[3] or 0, 'dias_inatividade': res_rec[4] or 0
-                        }
 
                     df_evolucao = pd.read_sql(text("SELECT CAST(YEAR(Dat_Emissao) AS VARCHAR) + '/' + RIGHT('0' + CAST(MONTH(Dat_Emissao) AS VARCHAR), 2) as Periodo, SUM(Vlr_TotalNota) as Total FROM NFSCB WHERE Cod_Cliente = :cid AND Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao BETWEEN :ini AND :fim GROUP BY YEAR(Dat_Emissao), MONTH(Dat_Emissao) ORDER BY 1"), conn, params={"cid": cliente_id, "ini": dt_ini, "fim": dt_fim})
                     if not df_evolucao.empty:
@@ -223,9 +186,38 @@ def analise_cliente():
 @app.route('/pedidos_eletronicos')
 @login_required
 def pedidos_eletronicos():
-    s = {'atual': {'Total':{'valor':0,'qtd':0}, 'T':{'valor':0,'qtd':0}, 'M':{'valor':0,'qtd':0}},
-         'anterior': {'Total':{'valor':0,'qtd':0}, 'T':{'valor':0,'qtd':0}, 'M':{'valor':0,'qtd':0}}}
-    return render_template('pedidos_eletronicos.html', vendedores=[], vendedor_id='todos', data_inicio='', data_fim='', stats=s)
+    engine = get_sql_engine()
+    hoje = datetime.now()
+    data_inicio = request.args.get('data_inicio', hoje.replace(day=1).strftime('%Y-%m-%d'))
+    data_fim = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
+    vendedor_id = request.args.get('vendedor_id', 'todos')
+
+    vendedores, stats = [], {'atual': {'Total':{'valor':0,'qtd':0}, 'T':{'valor':0,'qtd':0}, 'M':{'valor':0,'qtd':0}},
+                             'anterior': {'Total':{'valor':0,'qtd':0}, 'T':{'valor':0,'qtd':0}, 'M':{'valor':0,'qtd':0}}}
+
+    if engine:
+        with engine.connect() as conn:
+            vendedores = pd.read_sql(text("SELECT DISTINCT ve.Codigo, ve.Nome_Guerra FROM VENDE ve INNER JOIN PDVCB cb ON ve.Codigo = cb.Cod_Vendedor WHERE cb.Cod_Estabe=0"), conn).values.tolist()
+            d_ini, d_fim = datetime.strptime(data_inicio, '%Y-%m-%d'), datetime.strptime(data_fim, '%Y-%m-%d')
+            d_ini_prev, d_fim_prev = d_ini - pd.DateOffset(months=1), d_fim - pd.DateOffset(months=1)
+
+            def get_stats(start, end):
+                where = "cb.Cod_Estabe = 0 AND cb.Tip_Pedido <> 'C' AND cb.Status1 IN ('P','D') AND cb.Dat_Pedido BETWEEN :s AND :e"
+                p = {"s": start, "e": end}
+                if vendedor_id != 'todos':
+                    where += " AND cb.Cod_Vendedor = :vid"; p["vid"] = int(vendedor_id)
+                sql = f"SELECT SUBSTRING(ISNULL(Cod_OrigemPdv, ''), 1, 1) as Orig, SUM(C_VlrPedido) as Vlr, COUNT(*) as Qtd FROM PDVCB cb WHERE {where} GROUP BY SUBSTRING(ISNULL(Cod_OrigemPdv, ''), 1, 1)"
+                df = pd.read_sql(text(sql), conn, params=p)
+                res = {'Total':{'valor':0,'qtd':0}, 'T':{'valor':0,'qtd':0}, 'M':{'valor':0,'qtd':0}}
+                for _, r in df.iterrows():
+                    o = str(r['Orig']).upper()
+                    if o in res: res[o] = {'valor': float(r['Vlr']), 'qtd': int(r['Qtd'])}
+                    res['Total']['valor'] += float(r['Vlr']); res['Total']['qtd'] += int(r['Qtd'])
+                return res
+
+            stats['atual'], stats['anterior'] = get_stats(d_ini, d_fim), get_stats(d_ini_prev, d_fim_prev)
+
+    return render_template('pedidos_eletronicos.html', vendedores=vendedores, vendedor_id=vendedor_id, data_inicio=data_inicio, data_fim=data_fim, stats=stats)
 
 @app.route('/vendas_produto')
 @login_required
@@ -244,7 +236,6 @@ def vendas_produto():
                 dt_ini_obj = datetime.strptime(data_inicio, '%Y-%m-%d')
                 dt_ini_str, dt_fim_str = dt_ini_obj.strftime('%Y%m%d'), datetime.strptime(data_fim, '%Y-%m-%d').strftime('%Y%m%d')
 
-                # Ajuste: Incluído pr.Descricao AS produto para aparecer no template
                 sql = """
                 SELECT vendas.Nome_Guerra, vendas.Cod_Vendedor, vendas.Cod_Produto, vendas.produto,
                        Qtd_Cota_Mensal = ISNULL(cotas.Qtd_Cota, 0), Unidades_Vendidas = vendas.Unidades,
@@ -255,10 +246,8 @@ def vendas_produto():
                     SELECT ve.Nome_Guerra, ve.Codigo AS Cod_Vendedor, it.Cod_Produto, pr.Descricao AS produto,
                            Unidades = SUM(COALESCE(it.Qtd_Produto, 0) + COALESCE(it.Qtd_Bonificacao, 0)),
                            VlrLiq = SUM(COALESCE(it.Vlr_LiqItem, 0) - COALESCE(it.Vlr_SubsTrib, 0) - COALESCE(it.Vlr_SbtRes, 0) - COALESCE(it.Vlr_RecSbt, 0) - COALESCE(it.Vlr_SubsTribEmb, 0) - COALESCE(it.Vlr_DespRateada, 0) - COALESCE(it.Vlr_DspExt, 0))
-                    FROM NFSCB cb
-                    INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Ser_Nota = it.Ser_Nota AND cb.Num_Nota = it.Num_Nota
-                    INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo
-                    INNER JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo
+                    FROM NFSCB cb INNER JOIN NFSIT it ON cb.Cod_Estabe = it.Cod_Estabe AND cb.Ser_Nota = it.Ser_Nota AND cb.Num_Nota = it.Num_Nota
+                    INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo INNER JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo
                     INNER JOIN SUPER su ON ve.Cod_Supervisor = su.Codigo
                     WHERE cb.Cod_Estabe = 0 AND su.Cod_Gerencia = 2 AND ve.Cod_Supervisor = 2 AND cb.Dat_Emissao >= :dt_ini AND cb.Dat_Emissao <= :dt_fim AND cb.Status = 'F' AND cb.Tip_Saida = 'V'
                     GROUP BY ve.Nome_Guerra, ve.Codigo, it.Cod_Produto, pr.Descricao
@@ -268,15 +257,12 @@ def vendas_produto():
                 """
                 params = {"dt_ini": dt_ini_str, "dt_fim": dt_fim_str, "ano": dt_ini_obj.year, "mes": dt_ini_obj.month}
                 if vendedor_sel and _is_int_string(vendedor_sel):
-                    params["codven"] = int(vendedor_sel)
-                    sql += " AND vendas.Cod_Vendedor = :codven"
-                
+                    params["codven"] = int(vendedor_sel); sql += " AND vendas.Cod_Vendedor = :codven"
                 df = pd.read_sql(text(sql), conn, params=params)
                 if not df.empty:
                     vendas = df.to_dict('records')
                     stats = {'atual_total': df['VlrLiq'].sum(), 'meta_total': int(df['Qtd_Cota_Mensal'].sum()), 'qtd_atual': int(df['Unidades_Vendidas'].sum())}
             except Exception as e: flash(f'Erro em Vendas Produto: {str(e)}', 'danger')
-
     return render_template('vendas_produto.html', vendedores=vendedores, vendas=vendas, stats=stats, data_inicio=data_inicio, data_fim=data_fim, vendedor_sel=vendedor_sel)
 
 @app.route('/vendas_fabricante')
@@ -311,8 +297,7 @@ def vendas_fabricante():
                 """
                 params = {"dt_ini": dt_ini_str, "dt_fim": dt_fim_str}
                 if vendedor_sel and _is_int_string(vendedor_sel):
-                    params["codven"] = int(vendedor_sel)
-                    sql += " AND x.CodVen = :codven"
+                    params["codven"] = int(vendedor_sel); sql += " AND x.CodVen = :codven"
                 df = pd.read_sql(text(sql), conn, params=params)
                 if not df.empty:
                     vendas = df.to_dict('records')
