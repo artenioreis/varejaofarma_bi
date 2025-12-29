@@ -47,6 +47,16 @@ def get_sql_engine():
         return create_engine(f"mssql+pyodbc:///?odbc_connect={params}")
     except: return None
 
+def _is_int_string(s: str) -> bool:
+    """
+    Retorna True se s representa um inteiro positivo, False caso contrário.
+    Evita enviar strings como 'todos' para parâmetros numéricos da query.
+    """
+    if s is None:
+        return False
+    s = str(s).strip()
+    return s.isdigit()
+
 @app.route('/')
 def index(): return redirect(url_for('login'))
 
@@ -382,15 +392,10 @@ def vendas_produto(): return render_template('vendas_produto.html', vendedores=[
 def vendas_fabricante():
     """
     Corrige o endpoint de Vendas por Fabricante vs Metas (VECOT).
-    Usa o SELECT fornecido pelo usuário como base e aplica filtros de data e vendedor.
-    Retorna para o template vendas_fabricante.html:
-      - vendedores: lista de vendedores
-      - vendas: registros resultantes da query (lista de dicts)
-      - stats: total_vendido, total_meta
-      - data_inicio / data_fim (strings)
-    Observações:
-      - Não altera outras rotas/funcionalidades.
-      - Trabalha de forma segura quando não há engine configurada.
+    Ajuste principal: exibir APENAS fabricantes que possuem Qtd_Cota (v.Qtd_Cota) maior que zero.
+    Proteções:
+      - evita passar 'todos' (string) como parâmetro numérico.
+      - só aplica filtro x.CodVen = :codven se vendedor_sel for numérico.
     """
     engine = get_sql_engine()
     hoje = datetime.now()
@@ -481,10 +486,18 @@ def vendas_fabricante():
 
             params = {"dt_ini": dt_ini_str, "dt_fim": dt_fim_str}
 
-            # Se foi informado um vendedor, aplica filtro (por código)
-            if vendedor_sel:
+            # CORREÇÃO: só aplica filtro por vendedor se vendedor_sel for um código numérico.
+            # Isso evita o erro de conversão quando o selector envia 'todos' (string).
+            if vendedor_sel and _is_int_string(vendedor_sel):
+                # Convertemos explicitamente para int antes de enviar ao driver
+                params["codven"] = int(vendedor_sel)
                 sql += " AND x.CodVen = :codven"
-                params["codven"] = vendedor_sel
+            else:
+                # Não adiciona filtro por vendedor (ou seja, 'todos' ou vazio -> traz todos)
+                pass
+
+            # Filtrar para exibir apenas fabricantes com Qtd_Cota > 0.
+            sql += " AND ISNULL(v.Qtd_Cota, 0) > 0"
 
             sql += " ORDER BY x.Ano, x.Mes, x.Nome_Guerra"
 
