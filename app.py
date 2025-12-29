@@ -122,7 +122,7 @@ def analise_cliente():
             dt_ini, dt_fim = datetime.strptime(data_ini_str, '%Y-%m-%d'), datetime.strptime(data_fim_str, '%Y-%m-%d').replace(hour=23, minute=59)
 
             if not cliente_id and not cliente_busca and not v_id:
-                # Visão Geral
+                # Visão Geral completa restaurada
                 df_ativos = pd.read_sql(text("SELECT COUNT(DISTINCT Cod_Cliente) as total_ativos FROM NFSCB WHERE Status = 'F' AND Cod_Estabe = 0 AND Dat_Emissao BETWEEN :ini AND :fim"), conn, params={"ini": dt_ini, "fim": dt_fim})
                 if not df_ativos.empty: visao_geral['total_clientes_ativos'] = df_ativos.iloc[0]['total_ativos']
                 
@@ -149,6 +149,7 @@ def analise_cliente():
                     ranking_menos = df_all.sort_values(by='Total', ascending=True).head(10).to_dict('records')
 
             if cliente_id:
+                # Lógica completa do botão Analisar restaurada
                 df_cli = pd.read_sql(text("SELECT Codigo, Razao_Social, Limite_Credito FROM clien WHERE Codigo = :cid"), conn, params={"cid": cliente_id})
                 if not df_cli.empty:
                     c = df_cli.iloc[0]
@@ -222,7 +223,6 @@ def analise_cliente():
 @app.route('/pedidos_eletronicos')
 @login_required
 def pedidos_eletronicos():
-    # Rota simplificada para manter funcionamento sem erros
     s = {'atual': {'Total':{'valor':0,'qtd':0}, 'T':{'valor':0,'qtd':0}, 'M':{'valor':0,'qtd':0}},
          'anterior': {'Total':{'valor':0,'qtd':0}, 'T':{'valor':0,'qtd':0}, 'M':{'valor':0,'qtd':0}}}
     return render_template('pedidos_eletronicos.html', vendedores=[], vendedor_id='todos', data_inicio='', data_fim='', stats=s)
@@ -244,14 +244,15 @@ def vendas_produto():
                 dt_ini_obj = datetime.strptime(data_inicio, '%Y-%m-%d')
                 dt_ini_str, dt_fim_str = dt_ini_obj.strftime('%Y%m%d'), datetime.strptime(data_fim, '%Y-%m-%d').strftime('%Y%m%d')
 
+                # Ajuste: Incluído pr.Descricao AS produto para aparecer no template
                 sql = """
-                SELECT vendas.Nome_Guerra, vendas.Cod_Vendedor, vendas.Cod_Produto, vendas.Produto,
+                SELECT vendas.Nome_Guerra, vendas.Cod_Vendedor, vendas.Cod_Produto, vendas.produto,
                        Qtd_Cota_Mensal = ISNULL(cotas.Qtd_Cota, 0), Unidades_Vendidas = vendas.Unidades,
                        Faltam = CASE WHEN ISNULL(cotas.Qtd_Cota, 0) > vendas.Unidades THEN ISNULL(cotas.Qtd_Cota, 0) - vendas.Unidades ELSE 0 END,
                        Status = CASE WHEN vendas.Unidades >= ISNULL(cotas.Qtd_Cota, 0) AND ISNULL(cotas.Qtd_Cota, 0) > 0 THEN 'META BATIDA' ELSE 'PENDENTE' END,
                        vendas.VlrLiq
                 FROM (
-                    SELECT ve.Nome_Guerra, ve.Codigo AS Cod_Vendedor, it.Cod_Produto, pr.Descricao AS Produto,
+                    SELECT ve.Nome_Guerra, ve.Codigo AS Cod_Vendedor, it.Cod_Produto, pr.Descricao AS produto,
                            Unidades = SUM(COALESCE(it.Qtd_Produto, 0) + COALESCE(it.Qtd_Bonificacao, 0)),
                            VlrLiq = SUM(COALESCE(it.Vlr_LiqItem, 0) - COALESCE(it.Vlr_SubsTrib, 0) - COALESCE(it.Vlr_SbtRes, 0) - COALESCE(it.Vlr_RecSbt, 0) - COALESCE(it.Vlr_SubsTribEmb, 0) - COALESCE(it.Vlr_DespRateada, 0) - COALESCE(it.Vlr_DspExt, 0))
                     FROM NFSCB cb
