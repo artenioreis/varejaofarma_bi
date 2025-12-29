@@ -1,23 +1,41 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard BI{% endblock %}
+{% block title %}Visão CEO - Dashboard Estratégico{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row">
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-success shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Vendas (Mês Atual)</div>
-                    <div class="h5 mb-0 font-weight-bold text-gray-800">R$ {{ "%.2f"|format(cards_data.total_vendas) }}</div>
-                </div>
-            </div>
-        </div>
+    <div class="row mb-4">
         <div class="col-xl-3 col-md-6 mb-4">
             <div class="card border-left-primary shadow h-100 py-2">
                 <div class="card-body">
-                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total de Pedidos</div>
-                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ cards_data.total_pedidos }}</div>
+                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Faturamento (Mês Atual)</div>
+                    <div class="h4 mb-0 font-weight-bold text-gray-800">R$ {{ "%.2f"|format(kpis.faturamento_mes) }}</div>
+                    <div class="mt-2">
+                        <span class="badge {{ 'bg-success' if kpis.crescimento_vs_anterior >= 0 else 'bg-danger' }}">
+                            <i class="bi {{ 'bi-arrow-up' if kpis.crescimento_vs_anterior >= 0 else 'bi-arrow-down' }}"></i>
+                            {{ "%.1f"|format(kpis.crescimento_vs_anterior) }}% vs mês ant.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Ticket Médio</div>
+                    <div class="h4 mb-0 font-weight-bold text-gray-800">R$ {{ "%.2f"|format(kpis.ticket_medio) }}</div>
+                    <div class="text-xs text-muted mt-2">Base: {{ kpis.pedidos_totais }} pedidos realizados</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Clientes Ativos (Mês)</div>
+                    <div class="h4 mb-0 font-weight-bold text-gray-800">{{ kpis.clientes_ativos }}</div>
+                    <div class="text-xs text-muted mt-2">Interações comerciais no período</div>
                 </div>
             </div>
         </div>
@@ -27,40 +45,21 @@
         <div class="col-xl-8 col-lg-7">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Desempenho por Vendedor</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">Análise de Tendência de Faturamento (12 Meses)</h6>
                 </div>
                 <div class="card-body">
-                    <div id="chart"></div>
+                    <div id="lineChart" style="height: 400px;"></div>
                 </div>
             </div>
         </div>
-        
+
         <div class="col-xl-4 col-lg-5">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Top 5 Vendedores</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">Market Share (Top 5 Equipe)</h6>
                 </div>
                 <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Nome</th>
-                                    <th>Total</th>
-                                    <th>T. Médio</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for vendedor in top_vendedores %}
-                                <tr>
-                                    <td>{{ vendedor.nome_guerra }}</td>
-                                    <td>R$ {{ "%.2f"|format(vendedor.total_vendas) }}</td>
-                                    <td>R$ {{ "%.2f"|format(vendedor.total_vendas / vendedor.qtd_pedidos if vendedor.qtd_pedidos > 0 else 0) }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+                    <div id="pieChart" style="height: 400px;"></div>
                 </div>
             </div>
         </div>
@@ -69,7 +68,10 @@
 
 <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <script>
-    var graphs = {{ graficos_data.top_vendedores | safe }};
-    Plotly.newPlot('chart', graphs.data, graphs.layout);
+    var evGraph = {{ graficos_data.evolucao_vendas | safe }};
+    Plotly.newPlot('lineChart', evGraph.data, evGraph.layout, {responsive: true});
+
+    var shareGraph = {{ graficos_data.market_share | safe }};
+    Plotly.newPlot('pieChart', shareGraph.data, shareGraph.layout, {responsive: true});
 </script>
 {% endblock %}
