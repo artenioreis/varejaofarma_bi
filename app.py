@@ -57,15 +57,22 @@ def index(): return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    # BUSQUE A CONFIGURAÇÃO NO BANCO DE DADOS
+    db_config = DatabaseConfig.query.first()
+    
     if request.method == 'POST':
         u, p = request.form.get('username'), request.form.get('password')
         if u == 'admin' and p == 'admin123':
             user = User.query.filter_by(username='admin').first() or User(username='admin', password='admin123', nome='Gestor BI')
-            if not user.id: db.session.add(user); db.session.commit()
+            if not user.id: 
+                db.session.add(user)
+                db.session.commit()
             login_user(user)
             return redirect(url_for('dashboard'))
         flash('Usuário ou senha inválidos.', 'danger')
-    return render_template('login.html')
+        
+    # PASSE O OBJETO db_config PARA O TEMPLATE COM O NOME 'config'
+    return render_template('login.html', config=db_config)
 
 @app.route('/config-db', methods=['GET', 'POST'])
 def config_db():
