@@ -26,10 +26,10 @@
                     <i class="bi bi-phone me-2"></i> Pedidos Eletrônicos
                 </a>
                 <a href="{{ url_for('vendas_produto') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1 {% if request.endpoint == 'vendas_produto' %}active-nav{% endif %}">
-                    <i class="bi bi-award me-2"></i> Cotas de Vendedores
+                    <i class="bi bi-award me-2"></i> Cotas de Vendedores por Produtos
                 </a>
                 <a href="{{ url_for('vendas_fabricante') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1 {% if request.endpoint == 'vendas_fabricante' %}active-nav{% endif %}">
-                    <i class="bi bi-box me-2"></i> Vendas Fabricante
+                    <i class="bi bi-box me-2"></i> Cotas de Vendedores por Fabricante
                 </a>
                 <a href="{{ url_for('analise_cliente') }}" class="list-group-item list-group-item-action bg-dark text-white border-0 rounded-2 mb-1 {% if request.endpoint == 'analise_cliente' %}active-nav{% endif %}">
                   <i class="bi bi-people me-2"></i> Análise de Clientes

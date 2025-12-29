@@ -157,20 +157,6 @@ def analise_cliente():
                 if not df_ev_cli.empty:
                     graficos['evolucao_clientes'] = json.dumps(px.line(df_ev_cli, x='Periodo', y='Total_Clientes', title='Evolução de Clientes Ativos', markers=True), cls=plotly.utils.PlotlyJSONEncoder)
 
-                sql_faixas = text("""
-                    WITH ClientesCompras AS (
-                        SELECT Cod_Cliente, SUM(Vlr_TotalNota) as Total FROM NFSCB WHERE Status = 'F' AND Dat_Emissao BETWEEN :ini AND :fim GROUP BY Cod_Cliente
-                    )
-                    SELECT FaixaValor as Faixa, COUNT(*) as Quantidade FROM (
-                        SELECT CASE WHEN Total <= 1000 THEN 'Até R$ 1.000' WHEN Total <= 5000 THEN 'R$ 1.001 a R$ 5.000'
-                                    WHEN Total <= 10000 THEN 'R$ 5.001 a R$ 10.000' ELSE 'Acima de R$ 10.000' END as FaixaValor
-                        FROM ClientesCompras
-                    ) FaixasTemp GROUP BY FaixaValor
-                """)
-                df_faixas = pd.read_sql(sql_faixas, conn, params={"ini": dt_ini, "fim": dt_fim})
-                if not df_faixas.empty:
-                    graficos['distribuicao_faixas'] = json.dumps(px.pie(df_faixas, values='Quantidade', names='Faixa', title='Clientes por Faixa de Compra'), cls=plotly.utils.PlotlyJSONEncoder)
-
                 sql_ranking = text("SELECT cl.Codigo, cl.Razao_Social as [Razao Social], SUM(cb.Vlr_TotalNota) as Total FROM clien cl INNER JOIN NFSCB cb ON cb.Cod_Cliente = cl.Codigo WHERE cb.Status = 'F' AND cb.Dat_Emissao BETWEEN :ini AND :fim GROUP BY cl.Codigo, cl.Razao_Social HAVING SUM(cb.Vlr_TotalNota) > 0")
                 df_all = pd.read_sql(sql_ranking, conn, params={"ini": dt_ini, "fim": dt_fim})
                 if not df_all.empty:
@@ -271,36 +257,48 @@ def pedidos_eletronicos():
 def vendas_produto():
     engine = get_sql_engine()
     hoje = datetime.now()
-    data_inicio = request.args.get('data_inicio', hoje.replace(day=1).strftime('%Y-%m-%d'))
-    data_fim = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
+    dt_ini_str = request.args.get('data_inicio', hoje.replace(day=1).strftime('%Y-%m-%d'))
+    dt_fim_str = request.args.get('data_fim', hoje.strftime('%Y-%m-%d'))
     vendedor_sel = request.args.get('vendedor_id', '').strip()
     vendedores, vendas, stats = [], [], {'atual_total': 0, 'meta_total': 0, 'qtd_atual': 0}
     if engine:
         with engine.connect() as conn:
             try:
-                vendedores = pd.read_sql(text("SELECT Codigo, Nome_Guerra FROM VENDE WHERE bloqueado = 0 ORDER BY Nome_Guerra"), conn).to_dict('records')
-                dt_ini_obj = datetime.strptime(data_inicio, '%Y-%m-%d')
-                dt_ini_str, dt_fim_str = dt_ini_obj.strftime('%Y%m%d'), datetime.strptime(data_fim, '%Y-%m-%d').strftime('%Y%m%d')
+                vendedores = pd.read_sql(text("SELECT Codigo, Nome_Guerra FROM VENDE WHERE bloqueado=0 ORDER BY Nome_Guerra"), conn).to_dict('records')
+                dt_ini_obj = datetime.strptime(dt_ini_str, '%Y-%m-%d')
+                
+                # CONSULTA OTIMIZADA: Join direto com VECPR para filtrar as vendas na leitura inicial
                 sql = """
-                SELECT vendas.Nome_Guerra, vendas.Cod_Vendedor, vendas.Cod_Produto, vendas.produto, Qtd_Cota_Mensal = ISNULL(cotas.Qtd_Cota, 0), Unidades_Vendidas = vendas.Unidades,
-                       Faltam = CASE WHEN ISNULL(cotas.Qtd_Cota, 0) > vendas.Unidades THEN ISNULL(cotas.Qtd_Cota, 0) - vendas.Unidades ELSE 0 END,
-                       Status = CASE WHEN vendas.Unidades >= ISNULL(cotas.Qtd_Cota, 0) AND ISNULL(cotas.Qtd_Cota, 0) > 0 THEN 'META BATIDA' ELSE 'PENDENTE' END, vendas.VlrLiq
-                FROM (
-                    SELECT ve.Nome_Guerra, ve.Codigo AS Cod_Vendedor, it.Cod_Produto, pr.Descricao AS produto, Unidades = SUM(COALESCE(it.Qtd_Produto, 0) + COALESCE(it.Qtd_Bonificacao, 0)),
-                           VlrLiq = SUM(COALESCE(it.Vlr_LiqItem, 0) - COALESCE(it.Vlr_SubsTrib, 0) - COALESCE(it.Vlr_SbtRes, 0))
-                    FROM NFSCB cb INNER JOIN NFSIT it ON cb.Num_Nota = it.Num_Nota INNER JOIN PRODU pr ON it.Cod_Produto = pr.Codigo INNER JOIN VENDE ve ON cb.Cod_Vendedor = ve.Codigo
-                    WHERE cb.Dat_Emissao >= :dt_ini AND cb.Dat_Emissao <= :dt_fim AND cb.Status = 'F' GROUP BY ve.Nome_Guerra, ve.Codigo, it.Cod_Produto, pr.Descricao
-                ) vendas INNER JOIN VECPR cotas ON vendas.Cod_Vendedor = cotas.Cod_Vendedor AND vendas.Cod_Produto = cotas.Cod_Produt AND cotas.Ano_Ref = :ano AND cotas.Mes_Ref = :mes
-                WHERE ISNULL(cotas.Qtd_Cota, 0) > 0
+                    SELECT 
+                        ve.Nome_Guerra, 
+                        c.Cod_Vendedor, 
+                        c.Cod_Produt as Cod_Produto, 
+                        pr.Descricao as produto, 
+                        c.Qtd_Cota as Qtd_Cota_Mensal, 
+                        SUM(ISNULL(it.Qtd_Produto, 0) + ISNULL(it.Qtd_Bonificacao, 0)) as Unidades_Vendidas, 
+                        Faltam = CASE WHEN c.Qtd_Cota > SUM(ISNULL(it.Qtd_Produto, 0) + ISNULL(it.Qtd_Bonificacao, 0)) THEN c.Qtd_Cota - SUM(ISNULL(it.Qtd_Produto, 0) + ISNULL(it.Qtd_Bonificacao, 0)) ELSE 0 END,
+                        Status = CASE WHEN SUM(ISNULL(it.Qtd_Produto, 0) + ISNULL(it.Qtd_Bonificacao, 0)) >= c.Qtd_Cota THEN 'META BATIDA' ELSE 'PENDENTE' END,
+                        SUM(ISNULL(it.Vlr_LiqItem, 0) - ISNULL(it.Vlr_SubsTrib, 0) - ISNULL(it.Vlr_SbtRes, 0)) as VlrLiq
+                    FROM VECPR c
+                    INNER JOIN VENDE ve ON c.Cod_Vendedor = ve.Codigo
+                    INNER JOIN PRODU pr ON c.Cod_Produt = pr.Codigo
+                    INNER JOIN NFSCB cb ON cb.Cod_Vendedor = c.Cod_Vendedor
+                    INNER JOIN NFSIT it ON cb.Num_Nota = it.Num_Nota AND cb.Ser_Nota = it.Ser_Nota AND cb.Cod_Estabe = it.Cod_Estabe AND it.Cod_Produto = c.Cod_Produt
+                    WHERE c.Ano_Ref = :a AND c.Mes_Ref = :m AND c.Qtd_Cota > 0
+                      AND cb.Dat_Emissao BETWEEN :d1 AND :d2 
+                      AND cb.Status = 'F'
                 """
-                params = {"dt_ini": dt_ini_str, "dt_fim": dt_fim_str, "ano": dt_ini_obj.year, "mes": dt_ini_obj.month}
-                if vendedor_sel and _is_int_string(vendedor_sel): params["codven"] = int(vendedor_sel); sql += " AND vendas.Cod_Vendedor = :codven"
-                df = pd.read_sql(text(sql), conn, params=params)
+                p = {"d1": dt_ini_str.replace('-',''), "d2": dt_fim_str.replace('-',''), "a": dt_ini_obj.year, "m": dt_ini_obj.month}
+                if vendedor_sel and _is_int_string(vendedor_sel): p["cv"] = int(vendedor_sel); sql += " AND c.Cod_Vendedor = :cv"
+                
+                sql += " GROUP BY ve.Nome_Guerra, c.Cod_Vendedor, c.Cod_Produt, pr.Descricao, c.Qtd_Cota ORDER BY ve.Nome_Guerra, VlrLiq DESC"
+                
+                df = pd.read_sql(text(sql), conn, params=p)
                 if not df.empty:
                     vendas = df.to_dict('records')
                     stats = {'atual_total': df['VlrLiq'].sum(), 'meta_total': int(df['Qtd_Cota_Mensal'].sum()), 'qtd_atual': int(df['Unidades_Vendidas'].sum())}
             except Exception as e: flash(f'Erro em Vendas Produto: {str(e)}', 'danger')
-    return render_template('vendas_produto.html', vendedores=vendedores, vendas=vendas, stats=stats, data_inicio=data_inicio, data_fim=data_fim, vendedor_sel=vendedor_sel)
+    return render_template('vendas_produto.html', vendedores=vendedores, vendas=vendas, stats=stats, data_inicio=dt_ini_str, data_fim=dt_fim_str, vendedor_sel=vendedor_sel)
 
 @app.route('/vendas_fabricante')
 @login_required
@@ -316,6 +314,8 @@ def vendas_fabricante():
             try:
                 vendedores = pd.read_sql(text("SELECT Codigo, Nome_Guerra FROM VENDE WHERE bloqueado = 0 ORDER BY Nome_Guerra"), conn).to_dict('records')
                 dt_ini_str, dt_fim_str = datetime.strptime(data_inicio, '%Y-%m-%d').strftime('%Y%m%d'), datetime.strptime(data_fim, '%Y-%m-%d').strftime('%Y%m%d')
+                
+                # CORREÇÃO: Nomeação correta de Unidades para Unidades_Vendidas para evitar erro no Template
                 sql = """
                     SELECT x.*, ISNULL(v.Qtd_Cota, 0) AS Qtd_Cota_Mensal, Faltam = CASE WHEN ISNULL(v.Qtd_Cota, 0) - x.Unidades_Vendidas > 0 THEN ISNULL(v.Qtd_Cota, 0) - x.Unidades_Vendidas ELSE 0 END,
                            Status = CASE WHEN x.Unidades_Vendidas >= ISNULL(v.Qtd_Cota, 0) THEN 'META BATIDA' ELSE 'PENDENTE' END
@@ -326,7 +326,7 @@ def vendas_fabricante():
                     ) x LEFT JOIN VECOT v ON x.CodVen = v.Cod_Vendedor AND x.Cod_Fabricante = v.Cod_Fabricante AND x.Ano = v.Ano_Ref AND x.Mes = v.Mes_Ref WHERE ISNULL(v.Qtd_Cota, 0) > 0
                 """
                 params = {"dt_ini": dt_ini_str, "dt_fim": dt_fim_str}
-                if vendedor_sel and _is_int_string(vendedor_sel): p["codven"] = int(vendedor_sel); sql += " AND x.CodVen = :codven"
+                if vendedor_sel and _is_int_string(vendedor_sel): params["codven"] = int(vendedor_sel); sql += " AND x.CodVen = :codven"
                 df = pd.read_sql(text(sql), conn, params=params)
                 if not df.empty:
                     vendas = df.to_dict('records')
